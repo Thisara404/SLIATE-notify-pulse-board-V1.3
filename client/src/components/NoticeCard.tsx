@@ -1,5 +1,11 @@
-
-import { Calendar, Clock, ExternalLink, Download, Eye, Flag } from "lucide-react";
+import {
+  Calendar,
+  Clock,
+  ExternalLink,
+  Download,
+  Eye,
+  Flag,
+} from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +22,7 @@ interface Notice {
   date: string;
   expiry?: string;
   links?: string[];
-  attachments?: { name: string; url: string; }[];
+  attachments?: { name: string; url: string }[];
   images?: string[];
   views: number;
 }
@@ -27,14 +33,20 @@ interface NoticeCardProps {
 
 const NoticeCard = ({ notice }: NoticeCardProps) => {
   const navigate = useNavigate();
-  const [explosions, setExplosions] = useState<Array<{id: number, x: number, y: number}>>([]);
+  const [explosions, setExplosions] = useState<
+    Array<{ id: number; x: number; y: number }>
+  >([]);
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case "high": return "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800";
-      case "medium": return "bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-300 dark:border-yellow-800";
-      case "low": return "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800";
-      default: return "bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600";
+      case "high":
+        return "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800";
+      case "medium":
+        return "bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-300 dark:border-yellow-800";
+      case "low":
+        return "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800";
+      default:
+        return "bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600";
     }
   };
 
@@ -42,17 +54,17 @@ const NoticeCard = ({ notice }: NoticeCardProps) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    
+
     const newExplosion = {
       id: Date.now(),
       x,
-      y
+      y,
     };
-    
-    setExplosions(prev => [...prev, newExplosion]);
-    
+
+    setExplosions((prev) => [...prev, newExplosion]);
+
     setTimeout(() => {
-      setExplosions(prev => prev.filter(exp => exp.id !== newExplosion.id));
+      setExplosions((prev) => prev.filter((exp) => exp.id !== newExplosion.id));
     }, 600);
   };
 
@@ -65,14 +77,14 @@ const NoticeCard = ({ notice }: NoticeCardProps) => {
 
   return (
     <Card className="mb-4 hover:shadow-lg transition-all duration-300 border-sliate-accent/20 hover:border-sliate-accent/40 bg-white dark:bg-gray-800 dark:border-gray-600 relative overflow-hidden">
-      {explosions.map(explosion => (
+      {explosions.map((explosion) => (
         <div
           key={explosion.id}
           className="absolute pointer-events-none z-10"
           style={{
             left: explosion.x,
             top: explosion.y,
-            transform: 'translate(-50%, -50%)'
+            transform: "translate(-50%, -50%)",
           }}
         >
           {[...Array(8)].map((_, i) => (
@@ -82,24 +94,34 @@ const NoticeCard = ({ notice }: NoticeCardProps) => {
               style={{
                 transform: `rotate(${i * 45}deg) translateX(20px)`,
                 animationDelay: `${i * 50}ms`,
-                animationDuration: '600ms'
+                animationDuration: "600ms",
               }}
             />
           ))}
         </div>
       ))}
-      
+
       <CardHeader className="pb-3">
         <div className="flex flex-col sm:flex-row justify-between items-start gap-2">
           <div className="flex items-center space-x-2 flex-wrap">
-            <Badge className={`${getPriorityColor(notice.priority)} text-xs font-medium`}>
+            <Badge
+              className={`${getPriorityColor(
+                notice.priority
+              )} text-xs font-medium`}
+            >
               <Flag className="h-3 w-3 mr-1" />
               {notice.priority.toUpperCase()}
             </Badge>
-            <Badge variant="outline" className="text-xs border-sliate-accent/30 text-sliate-accent dark:border-sliate-light/30 dark:text-sliate-light">
+            <Badge
+              variant="outline"
+              className="text-xs border-sliate-accent/30 text-sliate-accent dark:border-sliate-light/30 dark:text-sliate-light"
+            >
               {notice.category}
             </Badge>
-            <Badge variant="outline" className="text-xs border-sliate-dark/30 text-sliate-dark dark:border-gray-400 dark:text-gray-300">
+            <Badge
+              variant="outline"
+              className="text-xs border-sliate-dark/30 text-sliate-dark dark:border-gray-400 dark:text-gray-300"
+            >
               {notice.department}
             </Badge>
           </div>
@@ -115,17 +137,16 @@ const NoticeCard = ({ notice }: NoticeCardProps) => {
           </div>
         </div>
       </CardHeader>
-      
+
       <CardContent className="space-y-4">
         <div>
           <h3 className="font-bold text-lg text-sliate-dark dark:text-white mb-2 leading-tight">
             {notice.topic}
           </h3>
           <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-            {notice.description.length > 200 ? 
-              `${notice.description.substring(0, 200)}...` : 
-              notice.description
-            }
+            {notice.description.length > 200
+              ? `${notice.description.substring(0, 200)}...`
+              : notice.description}
           </p>
         </div>
 
@@ -148,7 +169,9 @@ const NoticeCard = ({ notice }: NoticeCardProps) => {
             ))}
             {notice.images.length > 3 && (
               <div className="w-full h-24 bg-gray-100 dark:bg-gray-700 rounded border border-sliate-accent/20 dark:border-gray-600 flex items-center justify-center">
-                <span className="text-sm text-gray-600 dark:text-gray-400">+{notice.images.length - 3} more</span>
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  +{notice.images.length - 3} more
+                </span>
               </div>
             )}
           </div>
@@ -164,7 +187,7 @@ const NoticeCard = ({ notice }: NoticeCardProps) => {
                 onClick={createExplosion}
               >
                 <ExternalLink className="h-4 w-4 mr-1" />
-                {notice.links.length} Link{notice.links.length > 1 ? 's' : ''}
+                {notice.links.length} Link{notice.links.length > 1 ? "s" : ""}
               </Button>
             )}
 
@@ -176,11 +199,12 @@ const NoticeCard = ({ notice }: NoticeCardProps) => {
                 onClick={createExplosion}
               >
                 <Download className="h-4 w-4 mr-1" />
-                {notice.attachments.length} File{notice.attachments.length > 1 ? 's' : ''}
+                {notice.attachments.length} File
+                {notice.attachments.length > 1 ? "s" : ""}
               </Button>
             )}
           </div>
-          
+
           <Button
             onClick={handleViewDetails}
             className="bg-sliate-accent hover:bg-sliate-accent/90 text-white dark:bg-sliate-light dark:text-sliate-dark dark:hover:bg-sliate-light/90"

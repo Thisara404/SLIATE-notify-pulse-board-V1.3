@@ -1,41 +1,73 @@
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, User, Lock } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { Link, useNavigate, useLocation } from "react-router-dom";
+import { ArrowLeft, User, Lock, AlertCircle } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const Login = () => {
   const [credentials, setCredentials] = useState({ username: "", password: "" });
-  const [isLoading, setIsLoading] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  
+  const { login, isAuthenticated, isLoading, error, clearAuthError } = useAuth();
   const navigate = useNavigate();
-  const { toast } = useToast();
+  const location = useLocation();
+  
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      const from = location.state?.from?.pathname || "/dashboard";
+      navigate(from, { replace: true });
+    }
+  }, [isAuthenticated, navigate, location]);
+
+  // Clear errors when component mounts or unmounts
+  useEffect(() => {
+    clearAuthError();
+    setValidationError(null);
+    
+    return () => {
+      clearAuthError();
+    };
+  }, [clearAuthError]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
+    setValidationError(null);
+    clearAuthError();
+    
+    // Client-side validation
+    if (!credentials.username || !credentials.password) {
+      setValidationError("Please enter both username and password");
+      return;
+    }
 
-    // Simulate login process
-    setTimeout(() => {
-      if (credentials.username && credentials.password) {
-        toast({
-          title: "Login Successful",
-          description: "Welcome to SLIATE Admin Dashboard",
-        });
-        navigate("/dashboard");
-      } else {
-        toast({
-          title: "Login Failed", 
-          description: "Please enter valid credentials",
-          variant: "destructive",
-        });
+    if (credentials.username.length < 3) {
+      setValidationError("Username must be at least 3 characters");
+      return;
+    }
+
+    if (credentials.password.length < 8) {
+      setValidationError("Password must be at least 8 characters");
+      return;
+    }
+
+    try {
+      const result = await login(credentials);
+      
+      if (result.meta.requestStatus === 'fulfilled') {
+        // Redirect will happen via useEffect when isAuthenticated changes
+        console.log('Login successful');
       }
-      setIsLoading(false);
-    }, 1000);
+    } catch (error) {
+      console.error('Login error:', error);
+    }
   };
+
+  const displayError = validationError || error;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-sliate-neutral to-white dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4 relative overflow-hidden">
@@ -81,6 +113,13 @@ const Login = () => {
           </CardHeader>
 
           <CardContent>
+            {displayError && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{displayError}</AlertDescription>
+              </Alert>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="username" className="text-sliate-dark dark:text-white">Username</Label>
@@ -93,6 +132,10 @@ const Login = () => {
                     value={credentials.username}
                     onChange={(e) => setCredentials({...credentials, username: e.target.value})}
                     className="pl-10 border-sliate-accent/30 dark:border-gray-600 focus:border-sliate-accent dark:focus:border-sliate-light bg-white dark:bg-gray-700 text-sliate-dark dark:text-white placeholder:text-sliate-accent/60 dark:placeholder:text-gray-400"
+                    disabled={isLoading}
+                    required
+                    minLength={3}
+                    maxLength={30}
                   />
                 </div>
               </div>
@@ -108,6 +151,10 @@ const Login = () => {
                     value={credentials.password}
                     onChange={(e) => setCredentials({...credentials, password: e.target.value})}
                     className="pl-10 border-sliate-accent/30 dark:border-gray-600 focus:border-sliate-accent dark:focus:border-sliate-light bg-white dark:bg-gray-700 text-sliate-dark dark:text-white placeholder:text-sliate-accent/60 dark:placeholder:text-gray-400"
+                    disabled={isLoading}
+                    required
+                    minLength={8}
+                    maxLength={128}
                   />
                 </div>
               </div>

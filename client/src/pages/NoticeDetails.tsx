@@ -1,280 +1,350 @@
-
-import { useParams, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { ArrowLeft, Calendar, Clock, ExternalLink, Download, Eye, Flag, Share2 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import Header from "@/components/Header";
-import AnimatedBackground from "@/components/AnimatedBackground";
+import { Link, useParams, useNavigate } from "react-router-dom";
+import { 
+  ArrowLeft,
+  Calendar,
+  Clock,
+  Download,
+  Edit,
+  Eye,
+  Flag,
+  Trash2,
+  User,
+  CheckCircle,
+  FileText
+} from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
+import { noticeService, Notice } from "@/services/noticeApi";
 
-interface Notice {
-  id: string;
-  topic: string;
-  description: string;
-  priority: "high" | "medium" | "low";
-  category: string;
-  department: string;
-  date: string;
-  expiry?: string;
-  links?: string[];
-  attachments?: { name: string; url: string; }[];
-  images?: string[];
-  views: number;
-}
-
-const NoticeDetails = () => {
-  const { id } = useParams();
-  const navigate = useNavigate();
+const NoticeDetail = ({ publicMode = false }) => {
+  const { id } = useParams<{ id: string }>();
   const [notice, setNotice] = useState<Notice | null>(null);
-
-  // Sample data - in real app, fetch based on ID
-  const sampleNotices = [
-    {
-      id: "1",
-      topic: "Final Examination Schedule - Semester 1 2024",
-      description: "All students are hereby notified that the final examinations for Semester 1, 2024 will commence on January 15, 2024. Students must report to their respective examination halls 30 minutes before the scheduled time. Please bring your student ID card and necessary stationery. The examination will be conducted in strict accordance with the university guidelines. Any form of malpractice will result in immediate disqualification. Students are advised to check the examination timetable carefully and prepare accordingly. For any queries regarding the examination schedule, please contact the academic office during working hours.",
-      priority: "high" as const,
-      category: "Academic",
-      department: "IT",
-      date: "2024-01-08",
-      expiry: "2024-01-14",
-      views: 1247,
-      links: ["https://sliate.ac.lk/exam-schedule", "https://sliate.ac.lk/exam-guidelines"],
-      attachments: [
-        { name: "Exam_Schedule_Sem1_2024.pdf", url: "#" },
-        { name: "Exam_Guidelines.pdf", url: "#" },
-        { name: "Student_Instructions.pdf", url: "#" }
-      ],
-      images: [
-        "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=800&h=400&fit=crop",
-        "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800&h=400&fit=crop",
-        "https://images.unsplash.com/photo-1427504494785-3a9ca7044f45?w=800&h=400&fit=crop"
-      ]
-    },
-    {
-      id: "2",
-      topic: "Workshop on Emerging Technologies in IT",
-      description: "Department of Information Technology is organizing a workshop on 'Emerging Technologies in IT' featuring industry experts. This is an excellent opportunity for students to learn about latest trends in AI, Blockchain, and Cloud Computing.",
-      priority: "medium" as const,
-      category: "Upcoming Events",
-      department: "IT",
-      date: "2024-01-07",
-      views: 892,
-      links: ["https://sliate.ac.lk/workshop-registration"],
-      images: [
-        "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&h=400&fit=crop",
-        "https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?w=800&h=400&fit=crop"
-      ]
-    },
-    {
-      id: "3",
-      topic: "Library Hours Extension During Exam Period",
-      description: "The library will extend its operating hours during the examination period from January 10-25, 2024. New timings: Monday to Friday 7:00 AM - 10:00 PM, Saturday 8:00 AM - 8:00 PM, Sunday 9:00 AM - 6:00 PM.",
-      priority: "low" as const,
-      category: "Administrative",
-      department: "Management",
-      date: "2024-01-06",
-      views: 456,
-      expiry: "2024-01-25"
-    }
-  ];
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { hasPermission } = useAuth();
+  const navigate = useNavigate();
+  const { toast } = useToast();
 
   useEffect(() => {
-    const foundNotice = sampleNotices.find(n => n.id === id);
-    setNotice(foundNotice || null);
+    if (id) {
+      fetchNotice(id);
+    }
   }, [id]);
 
-  if (!notice) {
+  const fetchNotice = async (noticeId: string) => {
+    try {
+      setIsLoading(true);
+      const response = await noticeService.getNoticeById(noticeId);
+      setNotice(response.data.notice);
+      setError(null);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to fetch notice');
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : 'Failed to fetch notice',
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!notice) return;
+
+    if (!confirm("Are you sure you want to delete this notice?")) {
+      return;
+    }
+
+    try {
+      await noticeService.deleteNotice(notice.id);
+      toast({
+        title: "Notice Deleted",
+        description: "The notice has been successfully deleted."
+      });
+      navigate('/dashboard');
+    } catch (error) {
+      toast({
+        title: "Delete Failed",
+        description: error instanceof Error ? error.message : "Failed to delete notice",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handlePublish = async () => {
+    if (!notice) return;
+
+    try {
+      await noticeService.publishNotice(notice.id);
+      toast({
+        title: "Notice Published",
+        description: "The notice has been successfully published."
+      });
+      fetchNotice(notice.id.toString()); // Refresh notice data
+    } catch (error) {
+      toast({
+        title: "Publish Failed",
+        description: error instanceof Error ? error.message : "Failed to publish notice",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleUnpublish = async () => {
+    if (!notice) return;
+
+    try {
+      await noticeService.unpublishNotice(notice.id);
+      toast({
+        title: "Notice Unpublished",
+        description: "The notice has been successfully unpublished."
+      });
+      fetchNotice(notice.id.toString()); // Refresh notice data
+    } catch (error) {
+      toast({
+        title: "Unpublish Failed",
+        description: error instanceof Error ? error.message : "Failed to unpublish notice",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case "high":
+        return "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/20 dark:text-red-300";
+      case "medium":
+        return "bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-300";
+      case "low":
+        return "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-300";
+      default:
+        return "bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800 dark:text-gray-300";
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "published":
+        return "bg-green-100 text-green-800 border-green-200";
+      case "draft":
+        return "bg-gray-100 text-gray-800 border-gray-200";
+      default:
+        return "bg-gray-100 text-gray-800 border-gray-200";
+    }
+  };
+
+  if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-sliate-neutral to-white dark:from-gray-900 dark:to-gray-800 relative">
-        <AnimatedBackground />
-        <Header />
-        <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 relative z-10">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold text-sliate-dark dark:text-white mb-4">Notice Not Found</h1>
-            <Button onClick={() => navigate('/')} className="bg-sliate-accent hover:bg-sliate-accent/90 text-white">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Home
-            </Button>
-          </div>
-        </main>
+      <div className="min-h-screen bg-gradient-to-br from-sliate-neutral to-white dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-sliate-accent border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <h2 className="text-xl font-semibold text-sliate-dark dark:text-white">Loading Notice...</h2>
+        </div>
       </div>
     );
   }
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case "high": return "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800";
-      case "medium": return "bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-300 dark:border-yellow-800";
-      case "low": return "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800";
-      default: return "bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600";
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-sliate-neutral to-white dark:from-gray-900 dark:to-gray-800 relative">
-      <AnimatedBackground />
-      <Header />
-      
-      {/* Parallax Header */}
-      <div className="relative h-96 overflow-hidden">
-        <div 
-          className="absolute inset-0 bg-cover bg-center bg-fixed transform scale-105"
-          style={{
-            backgroundImage: notice.images && notice.images.length > 0 
-              ? `url(${notice.images[0]})` 
-              : `url(https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=1200&h=600&fit=crop)`
-          }}
-        />
-        <div className="absolute inset-0 bg-black/50" />
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="text-center text-white px-4">
-            <h1 className="text-3xl md:text-5xl font-bold mb-4 leading-tight">
-              {notice.topic}
-            </h1>
-            <p className="text-lg md:text-xl opacity-90 max-w-2xl">
-              You cannot hide the soul. Through all his unearthly tattooings, I thought I saw the traces of a simple honest heart.
+  if (error || !notice) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-sliate-neutral to-white dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
+        <Card className="max-w-md w-full border-red-300">
+          <CardHeader>
+            <CardTitle className="text-red-600">Error</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-gray-700 dark:text-gray-300 mb-4">
+              {error || "Notice not found"}
             </p>
-          </div>
-        </div>
-      </div>
-
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
-        <div className="mb-6">
-          <Button 
-            onClick={() => navigate('/')} 
-            variant="outline" 
-            className="mb-4 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Home
-          </Button>
-        </div>
-
-        <Card className="bg-white dark:bg-gray-800 dark:border-gray-600 mb-6">
-          <CardContent className="p-6">
-            <div className="flex flex-col md:flex-row justify-between items-start gap-4 mb-6">
-              <div className="flex flex-wrap gap-2">
-                <Badge className={`${getPriorityColor(notice.priority)} text-sm font-medium`}>
-                  <Flag className="h-3 w-3 mr-1" />
-                  {notice.priority.toUpperCase()} PRIORITY
-                </Badge>
-                <Badge variant="outline" className="text-sm border-sliate-accent/30 text-sliate-accent dark:border-sliate-light/30 dark:text-sliate-light">
-                  {notice.category}
-                </Badge>
-                <Badge variant="outline" className="text-sm border-sliate-dark/30 text-sliate-dark dark:border-gray-400 dark:text-gray-300">
-                  {notice.department}
-                </Badge>
-              </div>
-              
-              <div className="flex items-center space-x-4 text-sm text-sliate-accent dark:text-gray-400">
-                <div className="flex items-center space-x-1">
-                  <Calendar className="h-4 w-4" />
-                  <span>{notice.date}</span>
-                </div>
-                <div className="flex items-center space-x-1">
-                  <Eye className="h-4 w-4" />
-                  <span>{notice.views}</span>
-                </div>
-                <Button variant="outline" size="sm" className="dark:border-gray-600 dark:text-gray-300">
-                  <Share2 className="h-4 w-4 mr-1" />
-                  Share
-                </Button>
-              </div>
-            </div>
-
-            {notice.expiry && (
-              <div className="flex items-center space-x-1 text-sm text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 p-3 rounded-lg mb-6">
-                <Clock className="h-4 w-4" />
-                <span className="font-medium">Expires: {notice.expiry}</span>
-              </div>
-            )}
-
-            <div className="prose max-w-none dark:prose-invert">
-              <p className="text-base leading-relaxed text-gray-700 dark:text-gray-300">
-                {notice.description}
-              </p>
-            </div>
+            <Button asChild>
+              <Link to="/dashboard">Back to Dashboard</Link>
+            </Button>
           </CardContent>
         </Card>
+      </div>
+    );
+  }
 
-        {/* Images Gallery */}
-        {notice.images && notice.images.length > 0 && (
-          <Card className="bg-white dark:bg-gray-800 dark:border-gray-600 mb-6">
-            <CardContent className="p-6">
-              <h3 className="text-lg font-semibold text-sliate-dark dark:text-white mb-4">Images</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {notice.images.map((image, index) => (
-                  <img
-                    key={index}
-                    src={image}
-                    alt={`Notice image ${index + 1}`}
-                    className="w-full h-48 object-cover rounded-lg border border-sliate-accent/20 dark:border-gray-600 hover:scale-105 transition-transform duration-200"
-                  />
-                ))}
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-sliate-neutral to-white dark:from-gray-900 dark:to-gray-800">
+      <header className="bg-white dark:bg-gray-900 shadow-sm border-b border-sliate-accent/20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center space-x-4">
+              <Button variant="ghost" asChild className="text-sliate-accent dark:text-gray-300">
+                <Link to="/dashboard" className="flex items-center space-x-2">
+                  <ArrowLeft className="h-4 w-4" />
+                  <span>Back to Dashboard</span>
+                </Link>
+              </Button>
+              <div className="h-6 w-px bg-sliate-accent/30"></div>
+              <h1 className="text-xl font-bold text-sliate-dark dark:text-white">Notice Details</h1>
+            </div>
+            
+            {/* Only show admin controls if not in public mode */}
+            {!publicMode && (
+              <div className="flex items-center space-x-3">
+                {hasPermission('notice_edit') && (
+                  <Button asChild className="bg-sliate-accent hover:bg-sliate-accent/90 text-white">
+                    <Link to={`/edit-notice/${notice.id}`} className="flex items-center space-x-2">
+                      <Edit className="h-4 w-4" />
+                      <span>Edit</span>
+                    </Link>
+                  </Button>
+                )}
+                
+                {hasPermission('notice_delete') && (
+                  <Button 
+                    variant="outline" 
+                    onClick={handleDelete}
+                    className="flex items-center space-x-2 border-red-200 text-red-600 hover:bg-red-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span>Delete</span>
+                  </Button>
+                )}
               </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Links and Downloads */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {notice.links && notice.links.length > 0 && (
-            <Card className="bg-white dark:bg-gray-800 dark:border-gray-600">
-              <CardContent className="p-6">
-                <h3 className="text-lg font-semibold text-sliate-dark dark:text-white mb-4 flex items-center">
-                  <ExternalLink className="h-5 w-5 mr-2" />
-                  External Links
-                </h3>
-                <div className="space-y-3">
-                  {notice.links.map((link, index) => (
-                    <Button
-                      key={index}
-                      variant="outline"
-                      className="w-full justify-start border-sliate-accent text-sliate-accent hover:bg-sliate-accent hover:text-white dark:border-sliate-light dark:text-sliate-light dark:hover:bg-sliate-light dark:hover:text-sliate-dark"
-                      asChild
-                    >
-                      <a href={link} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="h-4 w-4 mr-2" />
-                        Link {index + 1}
-                      </a>
-                    </Button>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {notice.attachments && notice.attachments.length > 0 && (
-            <Card className="bg-white dark:bg-gray-800 dark:border-gray-600">
-              <CardContent className="p-6">
-                <h3 className="text-lg font-semibold text-sliate-dark dark:text-white mb-4 flex items-center">
-                  <Download className="h-5 w-5 mr-2" />
-                  Downloads
-                </h3>
-                <div className="space-y-3">
-                  {notice.attachments.map((file, index) => (
-                    <Button
-                      key={index}
-                      variant="outline"
-                      className="w-full justify-start border-sliate-dark text-sliate-dark hover:bg-sliate-dark hover:text-white dark:border-gray-400 dark:text-gray-300 dark:hover:bg-gray-600"
-                      asChild
-                    >
-                      <a href={file.url} download>
-                        <Download className="h-4 w-4 mr-2" />
-                        {file.name}
-                      </a>
-                    </Button>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+            )}
+          </div>
         </div>
+      </header>
+
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <Card className="border-sliate-accent/20 mb-6">
+          <CardHeader>
+            <div className="flex flex-col space-y-4">
+              <div className="flex flex-wrap gap-2 items-center justify-between">
+                <div className="flex flex-wrap gap-2 items-center">
+                  <Badge className={`${getPriorityColor(notice.priority)} text-xs font-medium`}>
+                    <Flag className="h-3 w-3 mr-1" />
+                    {notice.priority.toUpperCase()}
+                  </Badge>
+                  
+                  <Badge className={`${getStatusColor(notice.status)} text-xs`}>
+                    {notice.status === 'published' ? 
+                      <CheckCircle className="h-3 w-3 mr-1" /> : 
+                      <Clock className="h-3 w-3 mr-1" />
+                    }
+                    {notice.status === 'published' ? 'Published' : 'Draft'}
+                  </Badge>
+                  
+                  {/* Admin actions in notice content */}
+                  {!publicMode && hasPermission('notice_approve') && (
+                    notice.status === 'draft' ? (
+                      <Button 
+                        size="sm"
+                        variant="outline"
+                        className="text-green-600 border-green-200 hover:bg-green-50"
+                        onClick={handlePublish}
+                      >
+                        <CheckCircle className="h-3 w-3 mr-1" />
+                        Publish Now
+                      </Button>
+                    ) : (
+                      <Button 
+                        size="sm"
+                        variant="outline"
+                        className="text-orange-600 border-orange-200 hover:bg-orange-50"
+                        onClick={handleUnpublish}
+                      >
+                        <Clock className="h-3 w-3 mr-1" />
+                        Unpublish
+                      </Button>
+                    )
+                  )}
+                </div>
+                
+                <div className="flex items-center space-x-1 text-sliate-accent dark:text-gray-400">
+                  <Eye className="h-4 w-4" />
+                  <span className="text-sm">{notice.viewCount || 0} views</span>
+                </div>
+              </div>
+              
+              <h2 className="text-2xl font-bold text-sliate-dark dark:text-white">
+                {notice.title}
+              </h2>
+              
+              <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-sliate-accent dark:text-gray-400">
+                <div className="flex items-center space-x-1">
+                  <User className="h-4 w-4" />
+                  <span>By {notice.creatorName || notice.creatorUsername}</span>
+                </div>
+                
+                <div className="flex items-center space-x-1">
+                  <Calendar className="h-4 w-4" />
+                  <span>Created {new Date(notice.createdAt).toLocaleDateString()}</span>
+                </div>
+                
+                {notice.publishedAt && (
+                  <div className="flex items-center space-x-1">
+                    <CheckCircle className="h-4 w-4" />
+                    <span>Published {new Date(notice.publishedAt).toLocaleDateString()}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </CardHeader>
+          
+          <CardContent className="space-y-6">
+            {/* Notice Image */}
+            {notice.imageUrl && (
+              <div className="flex justify-center">
+                <img 
+                  src={`${import.meta.env.VITE_API_BASE_URL}/../${notice.imageUrl}`} 
+                  alt={notice.title}
+                  className="max-w-full max-h-96 object-contain rounded-md shadow-md"
+                />
+              </div>
+            )}
+            
+            {/* Notice Description */}
+            <div className="prose dark:prose-invert max-w-none">
+              <div dangerouslySetInnerHTML={{ __html: notice.description }} />
+            </div>
+            
+            {/* Files */}
+            {notice.files && notice.files.length > 0 && (
+              <div className="border border-sliate-accent/20 rounded-lg p-4">
+                <h3 className="text-lg font-medium text-sliate-dark dark:text-white mb-4 flex items-center">
+                  <FileText className="h-5 w-5 mr-2 text-sliate-accent" />
+                  Attachments
+                </h3>
+                <div className="space-y-3">
+                  {notice.files.map((file, index) => (
+                    <div 
+                      key={index} 
+                      className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-md"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <FileText className="h-5 w-5 text-sliate-accent" />
+                        <span className="font-medium text-sliate-dark dark:text-white">
+                          {file.name}
+                        </span>
+                      </div>
+                      <a 
+                        href={`${import.meta.env.VITE_API_BASE_URL}/../${file.url}`}
+                        download={file.name}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center space-x-1 text-sliate-accent hover:text-sliate-dark px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                      >
+                        <Download className="h-4 w-4" />
+                        <span className="text-sm">Download</span>
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </main>
     </div>
   );
 };
 
-export default NoticeDetails;
+export default NoticeDetail;

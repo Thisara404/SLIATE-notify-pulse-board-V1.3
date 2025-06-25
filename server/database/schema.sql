@@ -140,9 +140,9 @@ CREATE TABLE user_sessions (
 
 -- Insert admin users (password: admin123 - hashed with bcrypt)
 INSERT INTO users (username, email, password, role, full_name) VALUES
-('admin', 'admin@ati.ac.lk', '$2a$10$Lz0yWpr351ZsJDpn9Aknv.aUGQ19lphCk3h02V/JtcaTasQ4iIgZ6', 'admin', 'System Administrator'),
-('superadmin', 'superadmin@ati.ac.lk', '$2a$10$Lz0yWpr351ZsJDpn9Aknv.aUGQ19lphCk3h02V/JtcaTasQ4iIgZ6', 'super_admin', 'Super Administrator'),
-('j33wakasupun', 'jeewakasupun789@gmail.com', '$2a$10$Lz0yWpr351ZsJDpn9Aknv.aUGQ19lphCk3h02V/JtcaTasQ4iIgZ6', 'super_admin', 'Super Administrator');
+('admin', 'admin@ati.ac.lk', '$2a$10$B7PqfjLfJhpRlHXcQVg0GOY6pcqAalvm5HUYuc2yv8JIWNeh98cQu', 'admin', 'System Administrator'),
+('superadmin', 'superadmin@ati.ac.lk', '$2a$10$B7PqfjLfJhpRlHXcQVg0GOY6pcqAalvm5HUYuc2yv8JIWNeh98cQu', 'super_admin', 'Super Administrator'),
+('j33wakasupun', 'jeewakasupun789@gmail.com', '$2a$10$B7PqfjLfJhpRlHXcQVg0GOY6pcqAalvm5HUYuc2yv8JIWNeh98cQu', 'super_admin', 'Super Administrator');
 
 -- Insert sample notices for testing
 INSERT INTO notices (title, description, priority, status, slug, created_by, published_at) VALUES

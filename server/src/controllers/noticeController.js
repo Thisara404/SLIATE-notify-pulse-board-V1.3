@@ -48,7 +48,9 @@ class NoticeController {
                 createdBy: createdBy ? parseInt(createdBy) : null,
                 sortBy,
                 sortOrder: sortOrder.toUpperCase(),
-                includeStats: includeStats === 'true'
+                includeStats: includeStats === 'true',
+                userId: req.user.id, // Add userId for filtering drafts
+                showOnlyOwnDrafts: true // Always show own drafts for admins
             };
 
             console.log(`📋 Getting notices for ${req.user.username} with options:`, options);
@@ -240,6 +242,22 @@ class NoticeController {
                 });
             }
 
+            const sanitizeInput = (input) => {
+                if (typeof input !== 'string') return input;
+                return input
+                    .replace(/'/g, "''") // Escape single quotes
+                    .replace(/;/g, '')   // Remove semicolons
+                    .replace(/--/g, '')  // Remove SQL comments
+                    .replace(/select/gi, 'sel-ect')
+                    .replace(/update/gi, 'up-date')
+                    .replace(/delete/gi, 'del-ete')
+                    .replace(/drop/gi, 'dr-op');
+            };
+
+            // Sanitize input
+            const sanitizedTitle = sanitizeInput(req.body.title);
+            const sanitizedDescription = sanitizeInput(req.body.description);
+
             // Extract uploaded files and image
             const uploadedImage = req.files && req.files.image && req.files.image[0];
             const uploadedFiles = req.files && req.files.files
@@ -255,8 +273,8 @@ class NoticeController {
 
             // Prepare notice data
             const noticeData = {
-                title: req.body.title,
-                description: req.body.description,
+                title: sanitizedTitle,
+                description: sanitizedDescription,
                 imageUrl: uploadedImage ? `/uploads/images/${uploadedImage.filename}` : null,
                 files: filesJson,
                 priority: req.body.priority || 'medium',
