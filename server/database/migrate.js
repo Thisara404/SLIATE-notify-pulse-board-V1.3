@@ -293,7 +293,7 @@ class DatabaseMigrator {
 
 // CLI interface
 async function main() {
-  console.log('🚀 Simple Notice System - Database Migration');
+  console.log('🚀 SLIATE-Notify Notice System - Database Migration');
   console.log('=============================================');
   
   const migrator = new DatabaseMigrator();
