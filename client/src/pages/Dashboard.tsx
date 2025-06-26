@@ -1,29 +1,27 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Link, useNavigate } from "react-router-dom";
-import { 
-  ArrowLeft, 
-  Plus, 
-  Eye, 
-  Edit, 
-  Trash2, 
-  CheckCircle, 
-  Clock,
-  Users,
-  FileText,
-  TrendingUp,
-  LogOut,
-  User as UserIcon,
-  Settings,
-  Shield,
-  Search
-} from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { useNavigate, Link } from "react-router-dom";
+import { 
+  Plus, 
+  Search, 
+  FileText, 
+  Clock, 
+  Eye, 
+  Users, 
+  LogOut, 
+  Settings,
+  Filter,
+  Edit,
+  Trash2,
+  CheckCircle,
+  ChevronLeft,
+  ChevronRight
+} from "lucide-react";
 import { noticeService, Notice, NoticeFilters } from "@/services/noticeApi";
 import { Pagination } from "@/components/ui/pagination";
 
@@ -63,7 +61,8 @@ const Dashboard = () => {
       setIsLoading(true);
       const updatedFilters = {
         ...filters,
-        userId: user?.id, // Add user ID to filter drafts
+        userId: user?.id,
+        // We'll let the server handle this logic based on user role
         showOnlyOwnDrafts: true
       };
       
@@ -84,7 +83,6 @@ const Dashboard = () => {
 
   const fetchStatistics = async () => {
     try {
-      // In a real app, you might fetch this from a dedicated statistics endpoint
       const response = await noticeService.getAllNotices({
         includeStats: true,
         limit: 1
@@ -129,7 +127,7 @@ const Dashboard = () => {
     setFilters(prevFilters => ({
       ...prevFilters,
       search: searchQuery,
-      page: 1 // Reset to first page on new search
+      page: 1
     }));
   };
 
@@ -157,7 +155,7 @@ const Dashboard = () => {
   };
 
   const handleDeleteNotice = async (id: number) => {
-    if (!confirm("Are you sure you want to delete this notice?")) {
+    if (!confirm("Are you sure you want to delete this notice? This action cannot be undone.")) {
       return;
     }
 
@@ -214,14 +212,14 @@ const Dashboard = () => {
   const dashboardStats = [
     {
       title: "Total Notices",
-      value: stats.totalNotices.toString(),
+      value: pagination.total.toString(),
       change: "",
       icon: FileText,
       color: "text-blue-600"
     },
     {
       title: "Pending Approval",
-      value: stats.pendingNotices.toString(),
+      value: notices.filter((notice) => notice.status === "draft").length.toString(),
       change: "",
       icon: Clock,
       color: "text-orange-600",
@@ -229,7 +227,7 @@ const Dashboard = () => {
     },
     {
       title: "Total Views",
-      value: stats.totalViews.toString(),
+      value: notices.reduce((acc, notice) => acc + (notice.viewCount || 0), 0).toString(),
       change: "",
       icon: Eye,
       color: "text-green-600"
@@ -276,7 +274,7 @@ const Dashboard = () => {
             <div className="flex items-center space-x-4">
               <Button variant="ghost" asChild className="text-sliate-accent dark:text-gray-300">
                 <Link to="/" className="flex items-center space-x-2">
-                  <ArrowLeft className="h-4 w-4" />
+                  <ChevronLeft className="h-4 w-4" />
                   <span>Back to Notice Board</span>
                 </Link>
               </Button>

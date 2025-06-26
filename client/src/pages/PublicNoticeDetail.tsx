@@ -8,109 +8,76 @@ import {
   Calendar,
   Clock,
   Download,
-  Edit,
   Eye,
   Flag,
-  Trash2,
-  User,
-  CheckCircle,
   FileText
 } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { noticeService, Notice } from "@/services/noticeApi";
+import  NoticeCard  from "@/components/NoticeCard";
+import { binaryToString } from '@/utils/binaryUtils';
 
-const NoticeDetail = ({ publicMode = false }) => {
-  const { id } = useParams<{ id: string }>();
+interface Notice {
+  id: string | number;
+  title: string;
+  description: string;
+  imageUrl?: string;
+  priority: 'low' | 'medium' | 'high';
+  slug: string;
+  publishedAt?: string;
+  creatorName?: string;
+  viewCount?: number;
+  uniqueViewers?: number;
+  files?: Array<{ name: string; url: string; size?: number; type?: string }>;
+}
+
+const PublicNoticeDetail = () => {
+  const { slug } = useParams<{ slug: string }>();
   const [notice, setNotice] = useState<Notice | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { hasPermission } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
   useEffect(() => {
-    if (id) {
-      fetchNotice(id);
+    if (slug) {
+      fetchNotice(slug);
     }
-  }, [id]);
+  }, [slug]);
 
-  const fetchNotice = async (noticeId: string) => {
+  const fetchNotice = async (noticeSlug: string) => {
     try {
       setIsLoading(true);
-      const response = await noticeService.getNoticeById(noticeId);
-      setNotice(response.data.notice);
+      // Log the truncated slug for debugging
+      console.log("Fetching notice with slug:", noticeSlug.substring(0, 50) + (noticeSlug.length > 50 ? "..." : ""));
+      
+      const url = `${import.meta.env.VITE_API_BASE_URL}/public/notices/${noticeSlug}`;
+      
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error("API Error:", response.status, errorData);
+        
+        if (response.status === 404) {
+          throw new Error("Notice not found or has been removed");
+        } else {
+          throw new Error(errorData.message || `Failed to fetch notice (${response.status})`);
+        }
+      }
+      
+      const data = await response.json();
+      setNotice(data.data.notice);
       setError(null);
     } catch (error) {
+      console.error("Fetch error:", error);
       setError(error instanceof Error ? error.message : 'Failed to fetch notice');
       toast({
-        title: "Error",
+        title: "Notice Not Found",
         description: error instanceof Error ? error.message : 'Failed to fetch notice',
         variant: "destructive"
       });
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!notice) return;
-
-    if (!confirm("Are you sure you want to delete this notice?")) {
-      return;
-    }
-
-    try {
-      await noticeService.deleteNotice(notice.id);
-      toast({
-        title: "Notice Deleted",
-        description: "The notice has been successfully deleted."
-      });
-      navigate('/dashboard');
-    } catch (error) {
-      toast({
-        title: "Delete Failed",
-        description: error instanceof Error ? error.message : "Failed to delete notice",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const handlePublish = async () => {
-    if (!notice) return;
-
-    try {
-      await noticeService.publishNotice(notice.id);
-      toast({
-        title: "Notice Published",
-        description: "The notice has been successfully published."
-      });
-      fetchNotice(notice.id.toString()); // Refresh notice data
-    } catch (error) {
-      toast({
-        title: "Publish Failed",
-        description: error instanceof Error ? error.message : "Failed to publish notice",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const handleUnpublish = async () => {
-    if (!notice) return;
-
-    try {
-      await noticeService.unpublishNotice(notice.id);
-      toast({
-        title: "Notice Unpublished",
-        description: "The notice has been successfully unpublished."
-      });
-      fetchNotice(notice.id.toString()); // Refresh notice data
-    } catch (error) {
-      toast({
-        title: "Unpublish Failed",
-        description: error instanceof Error ? error.message : "Failed to unpublish notice",
-        variant: "destructive"
-      });
     }
   };
 
@@ -127,15 +94,33 @@ const NoticeDetail = ({ publicMode = false }) => {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "published":
-        return "bg-green-100 text-green-800 border-green-200";
-      case "draft":
-        return "bg-gray-100 text-gray-800 border-gray-200";
-      default:
-        return "bg-gray-100 text-gray-800 border-gray-200";
+  // Replace the getDescriptionText function with this browser-compatible version
+  const getDescriptionText = (description: any): string => {
+    if (typeof description === 'string') {
+      return description;
     }
+    
+    // Handle MySQL binary data format that comes as an object with type: 'Buffer'
+    if (description && typeof description === 'object') {
+      // Handle MySQL binary data format
+      if (description.type === 'Buffer' && Array.isArray(description.data)) {
+        try {
+          return binaryToString(description.data);
+        } catch (e) {
+          console.error('Failed to decode binary data:', e);
+          return '[Binary content]';
+        }
+      }
+      
+      // Fallback for other object types
+      try {
+        return JSON.stringify(description);
+      } catch (e) {
+        return '[Complex object]';
+      }
+    }
+    
+    return String(description || '');
   };
 
   if (isLoading) {
@@ -161,7 +146,7 @@ const NoticeDetail = ({ publicMode = false }) => {
               {error || "Notice not found"}
             </p>
             <Button asChild>
-              <Link to="/dashboard">Back to Dashboard</Link>
+              <Link to="/">Back to Home</Link>
             </Button>
           </CardContent>
         </Card>
@@ -176,39 +161,14 @@ const NoticeDetail = ({ publicMode = false }) => {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-4">
               <Button variant="ghost" asChild className="text-sliate-accent dark:text-gray-300">
-                <Link to="/dashboard" state={{ fromNoticeDetail: true }} className="flex items-center space-x-2">
+                <Link to="/" state={{ fromNoticeDetail: true }} className="flex items-center space-x-2">
                   <ArrowLeft className="h-4 w-4" />
-                  <span>Back to Dashboard</span>
+                  <span>Back to Home</span>
                 </Link>
               </Button>
               <div className="h-6 w-px bg-sliate-accent/30"></div>
               <h1 className="text-xl font-bold text-sliate-dark dark:text-white">Notice Details</h1>
             </div>
-            
-            {/* Only show admin controls if not in public mode */}
-            {!publicMode && (
-              <div className="flex items-center space-x-3">
-                {hasPermission('notice_edit') && (
-                  <Button asChild className="bg-sliate-accent hover:bg-sliate-accent/90 text-white">
-                    <Link to={`/edit-notice/${notice.id}`} className="flex items-center space-x-2">
-                      <Edit className="h-4 w-4" />
-                      <span>Edit</span>
-                    </Link>
-                  </Button>
-                )}
-                
-                {hasPermission('notice_delete') && (
-                  <Button 
-                    variant="outline" 
-                    onClick={handleDelete}
-                    className="flex items-center space-x-2 border-red-200 text-red-600 hover:bg-red-50"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    <span>Delete</span>
-                  </Button>
-                )}
-              </div>
-            )}
           </div>
         </div>
       </header>
@@ -223,44 +183,14 @@ const NoticeDetail = ({ publicMode = false }) => {
                     <Flag className="h-3 w-3 mr-1" />
                     {notice.priority.toUpperCase()}
                   </Badge>
-                  
-                  <Badge className={`${getStatusColor(notice.status)} text-xs`}>
-                    {notice.status === 'published' ? 
-                      <CheckCircle className="h-3 w-3 mr-1" /> : 
-                      <Clock className="h-3 w-3 mr-1" />
-                    }
-                    {notice.status === 'published' ? 'Published' : 'Draft'}
-                  </Badge>
-                  
-                  {/* Admin actions in notice content */}
-                  {!publicMode && hasPermission('notice_approve') && (
-                    notice.status === 'draft' ? (
-                      <Button 
-                        size="sm"
-                        variant="outline"
-                        className="text-green-600 border-green-200 hover:bg-green-50"
-                        onClick={handlePublish}
-                      >
-                        <CheckCircle className="h-3 w-3 mr-1" />
-                        Publish Now
-                      </Button>
-                    ) : (
-                      <Button 
-                        size="sm"
-                        variant="outline"
-                        className="text-orange-600 border-orange-200 hover:bg-orange-50"
-                        onClick={handleUnpublish}
-                      >
-                        <Clock className="h-3 w-3 mr-1" />
-                        Unpublish
-                      </Button>
-                    )
-                  )}
                 </div>
                 
                 <div className="flex items-center space-x-1 text-sliate-accent dark:text-gray-400">
                   <Eye className="h-4 w-4" />
-                  <span className="text-sm">{notice.viewCount || 0} views</span>
+                  <span className="text-sm">
+                    {typeof notice.viewCount === 'number' ? notice.viewCount : 
+                     typeof notice.viewCount === 'string' ? parseInt(notice.viewCount, 10) : 0} views
+                  </span>
                 </div>
               </div>
               
@@ -269,19 +199,15 @@ const NoticeDetail = ({ publicMode = false }) => {
               </h2>
               
               <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-sliate-accent dark:text-gray-400">
-                <div className="flex items-center space-x-1">
-                  <User className="h-4 w-4" />
-                  <span>By {notice.creatorName || notice.creatorUsername}</span>
-                </div>
-                
-                <div className="flex items-center space-x-1">
-                  <Calendar className="h-4 w-4" />
-                  <span>Created {new Date(notice.createdAt).toLocaleDateString()}</span>
-                </div>
+                {notice.creatorName && (
+                  <div className="flex items-center space-x-1">
+                    <span>By {notice.creatorName}</span>
+                  </div>
+                )}
                 
                 {notice.publishedAt && (
                   <div className="flex items-center space-x-1">
-                    <CheckCircle className="h-4 w-4" />
+                    <Calendar className="h-4 w-4" />
                     <span>Published {new Date(notice.publishedAt).toLocaleDateString()}</span>
                   </div>
                 )}
@@ -316,30 +242,14 @@ const NoticeDetail = ({ publicMode = false }) => {
               </div>
             )}
             
-            {/* Notice Description */}
+            {/* Notice content */}
             <div className="prose dark:prose-invert max-w-none">
               <div className="text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
-                {(() => {
-                  const desc = notice.description;
-
-                  // Helper function to decode binary data
-                  const decodeBinaryData = (data: Uint8Array): string => {
-                    const decoder = new TextDecoder("utf-8");
-                    return decoder.decode(data);
-                  };
-
-                  if (typeof desc === 'string') {
-                    return desc;
-                  }
-                  if (desc && desc.type === 'Buffer' && Array.isArray(desc.data)) {
-                    return decodeBinaryData(new Uint8Array(desc.data));
-                  }
-                  return desc?.toString() || "No description available";
-                })()}
+                {getDescriptionText(notice.description)}
               </div>
             </div>
             
-            {/* Files */}
+            {/* Files section */}
             {notice.files && notice.files.length > 0 && (
               <div className="border border-sliate-accent/20 rounded-lg p-4">
                 <h3 className="text-lg font-medium text-sliate-dark dark:text-white mb-4 flex items-center">
@@ -359,7 +269,7 @@ const NoticeDetail = ({ publicMode = false }) => {
                         </span>
                       </div>
                       <a 
-                        href={`http://localhost:5000${file.url.startsWith('/') ? '' : '/'}${file.url}`}
+                        href={`${import.meta.env.VITE_API_BASE_URL.replace('/api', '')}${file.url.startsWith('/') ? '' : '/'}${file.url}`}
                         download={file.name}
                         target="_blank"
                         rel="noopener noreferrer"
@@ -380,4 +290,4 @@ const NoticeDetail = ({ publicMode = false }) => {
   );
 };
 
-export default NoticeDetail;
+export default PublicNoticeDetail;

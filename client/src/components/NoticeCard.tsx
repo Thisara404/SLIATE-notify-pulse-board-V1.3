@@ -9,9 +9,10 @@ import {
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom"; 
 import { useState } from "react";
 
+// Define Notice interface with flexible views property
 interface Notice {
   id: string;
   topic: string;
@@ -24,14 +25,15 @@ interface Notice {
   links?: string[];
   attachments?: { name: string; url: string }[];
   images?: string[];
-  views: number;
+  views: number | string | null | undefined; // Make it more flexible
 }
 
 interface NoticeCardProps {
   notice: Notice;
+  slug?: string; // Add slug parameter
 }
 
-const NoticeCard = ({ notice }: NoticeCardProps) => {
+const NoticeCard = ({ notice, slug }: NoticeCardProps) => {
   const navigate = useNavigate();
   const [explosions, setExplosions] = useState<
     Array<{ id: number; x: number; y: number }>
@@ -68,11 +70,66 @@ const NoticeCard = ({ notice }: NoticeCardProps) => {
     }, 600);
   };
 
-  const handleViewDetails = (e: React.MouseEvent) => {
-    createExplosion(e);
-    setTimeout(() => {
+  // Fix the handleViewDetails function to avoid the getBoundingClientRect error
+  const handleViewDetails = () => {
+    // Navigate to the notice detail page with state
+    if (slug) {
+      navigate(`/public/notice/${slug}`, { state: { fromCard: true } });
+    } else {
       navigate(`/notice/${notice.id}`);
-    }, 300);
+    }
+  };
+
+  // Create a separate click handler for buttons that should trigger the explosion effect
+  const handleButtonWithExplosion = (e: React.MouseEvent) => {
+    createExplosion(e);
+  };
+
+  // Add this helper function at the top of your component:
+  const getViewCount = (views: number | string | null | undefined): number => {
+    console.log("View count type:", typeof views, "Value:", views); // Debugging
+    
+    if (views === undefined || views === null) {
+      return 0;
+    }
+    if (typeof views === 'number') {
+      return views;
+    }
+    if (typeof views === 'string') {
+      const parsed = parseInt(views, 10);
+      return isNaN(parsed) ? 0 : parsed;
+    }
+    return 0;
+  };
+
+  // Add this helper function at the top of your component to handle binary data
+  const getTextContent = (content: any): string => {
+    if (typeof content === 'string') {
+      return content;
+    }
+    
+    // Handle MySQL binary data format that comes as an object with type: 'Buffer'
+    if (content && typeof content === 'object') {
+      // Handle MySQL binary data format
+      if (content.type === 'Buffer' && Array.isArray(content.data)) {
+        try {
+          // Convert the array of bytes to string without using Buffer
+          return String.fromCharCode.apply(null, content.data);
+        } catch (e) {
+          console.error('Failed to decode binary data:', e);
+          return '[Binary content]';
+        }
+      }
+      
+      // Fallback for other object types
+      try {
+        return JSON.stringify(content);
+      } catch (e) {
+        return '[Complex object]';
+      }
+    }
+    
+    return String(content || '');
   };
 
   return (
@@ -132,7 +189,7 @@ const NoticeCard = ({ notice }: NoticeCardProps) => {
             </div>
             <div className="flex items-center space-x-1">
               <Eye className="h-4 w-4" />
-              <span>{notice.views}</span>
+              <span>{getViewCount(notice.views)}</span>
             </div>
           </div>
         </div>
@@ -144,9 +201,12 @@ const NoticeCard = ({ notice }: NoticeCardProps) => {
             {notice.topic}
           </h3>
           <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-            {notice.description.length > 200
-              ? `${notice.description.substring(0, 200)}...`
-              : notice.description}
+            {(() => {
+              const description = getTextContent(notice.description);
+              return description.length > 200
+                ? `${description.substring(0, 200)}...`
+                : description;
+            })()}
           </p>
         </div>
 
@@ -205,6 +265,7 @@ const NoticeCard = ({ notice }: NoticeCardProps) => {
             )}
           </div>
 
+          {/* Use Link for public view */}
           <Button
             onClick={handleViewDetails}
             className="bg-sliate-accent hover:bg-sliate-accent/90 text-white dark:bg-sliate-light dark:text-sliate-dark dark:hover:bg-sliate-light/90"

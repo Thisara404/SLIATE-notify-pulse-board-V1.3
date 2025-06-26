@@ -173,10 +173,13 @@ class PublicController {
                     title: notice.title,
                     description: desc.substring(0, 250) + (desc.length > 250 ? '...' : ''),
                     imageUrl: notice.imageUrl,
+                    files: notice.files,
                     priority: notice.priority,
                     slug: notice.slug,
                     publishedAt: notice.publishedAt,
-                    creatorName: notice.creatorName
+                    creatorName: notice.creatorName,
+                    viewCount: parseInt(notice.viewCount || '0'), // Ensure viewCount is always a number
+                    uniqueViewers: parseInt(notice.uniqueViewers || '0') // Ensure uniqueViewers is always a number
                 };
             });
 
@@ -210,6 +213,9 @@ class PublicController {
     getPublishedNoticeBySlug = async (req, res) => {
         try {
             const { slug } = req.params;
+            
+            // Log the incoming slug
+            console.log(`🔍 Looking for notice with slug: '${slug}'`);
 
             logApiAccess(req, 'GET_PUBLISHED_NOTICE', { slug });
 
@@ -225,6 +231,9 @@ class PublicController {
 
             // Find published notice
             const notice = await Notice.findBySlug(slug, true); // Include stats
+
+            // Log whether notice was found
+            console.log(`📄 Notice lookup result: ${notice ? 'Found' : 'Not found'}`);
 
             if (!notice || !notice.isPublished()) {
                 return res.status(404).json({
@@ -270,8 +279,8 @@ class PublicController {
                 slug: notice.slug,
                 publishedAt: notice.publishedAt,
                 creatorName: notice.creatorName,
-                viewCount: notice.viewCount || 0,
-                uniqueViewers: notice.uniqueViewers || 0
+                viewCount: parseInt(notice.viewCount || '0'), // Ensure viewCount is always a number
+                uniqueViewers: parseInt(notice.uniqueViewers || '0') // Ensure uniqueViewers is always a number
             };
 
             const publicRelatedNotices = relatedNotices.map(related => ({

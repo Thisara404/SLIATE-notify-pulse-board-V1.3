@@ -11,8 +11,10 @@ import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
 import CreateNotice from "./pages/CreateNotice";
+import EditNotice from "./pages/EditNotice";
 import NoticeDetail from "./pages/NoticeDetails";
 import NotFound from "./pages/NotFound";
+import PublicNoticeDetail from "./pages/PublicNoticeDetail"; // Import the PublicNoticeDetail component
 
 const queryClient = new QueryClient();
 
@@ -50,6 +52,17 @@ const App = () => (
                 } 
               />
               <Route 
+                path="/edit-notice/:id" 
+                element={
+                  <ProtectedRoute 
+                    requiredRoles={['admin', 'super_admin']}
+                    requiredPermissions={['notice_edit']}
+                  >
+                    <EditNotice />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
                 path="/notice/:id" 
                 element={
                   <ProtectedRoute requiredRoles={['admin', 'super_admin']}>
@@ -57,6 +70,9 @@ const App = () => (
                   </ProtectedRoute>
                 } 
               />
+              
+              {/* Public Notice Detail Route */}
+              <Route path="/public/notice/:slug" element={<PublicNoticeDetail />} />
               
               {/* 404 Page */}
               <Route path="*" element={<NotFound />} />

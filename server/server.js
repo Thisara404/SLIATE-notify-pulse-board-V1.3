@@ -91,13 +91,22 @@ class SLIATENoticeServer {
         this.app.use(express.json({ limit: '10mb', strict: true }));
         this.app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+        // Setup static file serving for uploads
         const uploadsPath = path.join(__dirname, 'uploads');
         if (fs.existsSync(uploadsPath)) {
-            this.app.use('/uploads', express.static(uploadsPath, {
+            // Serve all uploads with proper CORS headers
+            this.app.use('/uploads', (req, res, next) => {
+                res.setHeader('Access-Control-Allow-Origin', '*');
+                res.setHeader('Access-Control-Allow-Methods', 'GET');
+                res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+                res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+                next();
+            }, express.static(uploadsPath, {
                 maxAge: '1d',
                 etag: true,
                 lastModified: true
             }));
+            
             console.log('📁 Static files served from uploads/');
         }
     }

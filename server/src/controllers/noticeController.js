@@ -49,8 +49,8 @@ class NoticeController {
                 sortBy,
                 sortOrder: sortOrder.toUpperCase(),
                 includeStats: includeStats === 'true',
-                userId: req.user.id, // Add userId for filtering drafts
-                showOnlyOwnDrafts: true // Always show own drafts for admins
+                userId: req.user.id,
+                showOnlyOwnDrafts: req.user.role !== 'super_admin'
             };
 
             console.log(`📋 Getting notices for ${req.user.username} with options:`, options);
@@ -229,11 +229,6 @@ class NoticeController {
 
             // Check permissions (only admins can create notices)
             if (!['admin', 'super_admin'].includes(req.user.role)) {
-                logSecurityEvent(req, 'UNAUTHORIZED_NOTICE_CREATION', {
-                    attemptedBy: req.user.username,
-                    severity: 'medium'
-                });
-
                 return res.status(403).json({
                     success: false,
                     error: 'Insufficient Permissions',
@@ -243,7 +238,7 @@ class NoticeController {
             }
 
             const sanitizeInput = (input) => {
-                if (typeof input !== 'string') return input;
+                if (!input || typeof input !== 'string') return '';
                 return input
                     .replace(/'/g, "''") // Escape single quotes
                     .replace(/;/g, '')   // Remove semicolons
@@ -254,39 +249,58 @@ class NoticeController {
                     .replace(/drop/gi, 'dr-op');
             };
 
-            // Sanitize input
-            const sanitizedTitle = sanitizeInput(req.body.title);
-            const sanitizedDescription = sanitizeInput(req.body.description);
+            // Sanitize input - make sure these are strings
+            const sanitizedTitle = sanitizeInput(String(req.body.title || ''));
+            const sanitizedDescription = sanitizeInput(String(req.body.description || ''));
+
+            // Validate required fields
+            if (!sanitizedTitle.trim()) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Validation Error',
+                    message: 'Title is required',
+                    timestamp: new Date().toISOString()
+                });
+            }
+
+            if (!sanitizedDescription.trim()) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Validation Error',
+                    message: 'Description is required',
+                    timestamp: new Date().toISOString()
+                });
+            }
 
             // Extract uploaded files and image
             const uploadedImage = req.files && req.files.image && req.files.image[0];
             const uploadedFiles = req.files && req.files.files
                 ? req.files.files.map(file => ({
-                    filename: file.filename,
-                    originalname: file.originalname,
-                    url: `/uploads/files/${file.filename}`
+                    name: file.originalname,
+                    url: `/uploads/files/${file.filename}`,
+                    size: file.size,
+                    type: file.mimetype
                 }))
                 : [];
-
-            // Ensure files is always null or JSON string!
-            const filesJson = uploadedFiles.length > 0 ? JSON.stringify(uploadedFiles) : null;
 
             // Prepare notice data
             const noticeData = {
                 title: sanitizedTitle,
-                description: sanitizedDescription,
+                description: sanitizedDescription, // Ensure this is a plain string
                 imageUrl: uploadedImage ? `/uploads/images/${uploadedImage.filename}` : null,
-                files: filesJson,
+                files: uploadedFiles.length > 0 ? uploadedFiles : null,
                 priority: req.body.priority || 'medium',
                 status: req.body.status || 'draft'
             };
 
             console.log(`📝 Creating notice: "${noticeData.title}" by ${req.user.username}`);
+            console.log("Processing files:", req.files);
+            console.log("Processing body:", req.body);
 
             // Create notice
             const notice = await Notice.create(noticeData, req.user);
 
-            console.log(`✅ Notice created successfully: ${notice.title} (ID: ${notice.id})`);
+            console.log(`✅ Notice created successfully: ${notice.title}`);
 
             res.status(201).json({
                 success: true,
@@ -306,6 +320,9 @@ class NoticeController {
             if (error.message.includes('Validation failed')) {
                 statusCode = 400;
                 message = error.message;
+            } else if (error.message.includes('Duplicate')) {
+                statusCode = 409;
+                message = 'A notice with this title already exists';
             }
 
             res.status(statusCode).json({
@@ -385,7 +402,9 @@ class NoticeController {
             if (priority !== undefined) updateData.priority = priority;
             if (status !== undefined) updateData.status = status;
 
-            console.log(`📝 Updating notice: "${notice.title}" by ${req.user.username}`);
+            console.log(`📝 Updating notice: "${notice.title}" by ${req.user.username}"`);
+            console.log("Processing files:", req.files);
+            console.log("Processing body:", req.body);
 
             // Update notice
             await notice.update(updateData, req.user);

@@ -308,8 +308,8 @@ class UploadMiddleware {
                 Buffer.from([0xFE, 0xED, 0xFA, 0xCE]), // Mach-O (macOS executables)
                 Buffer.from([0xCE, 0xFA, 0xED, 0xFE]), // Mach-O (reverse)
                 Buffer.from([0xCA, 0xFE, 0xBA, 0xBE]), // Java class files
-                Buffer.from([0x50, 0x4B, 0x03, 0x04]), // ZIP (could contain executables)
-            ];
+                Buffer.from([0x50, 0x4B, 0x03, 0x04]) // ZIP (could contain executables)
+            ]; // Remove the extra comma after the last element
 
             for (const signature of executableSignatures) {
                 if (buffer.indexOf(signature) === 0) {
@@ -609,7 +609,44 @@ class UploadMiddleware {
 
 const multerInstance = multer({
     storage: secureUploadConfig.createSecureStorage(),
-    fileFilter: secureUploadConfig.createFileFilter(),
+    fileFilter: function (req, file, callback) {
+        // Log the incoming file for debugging
+        console.log(`Receiving file upload: ${file.originalname}, mimetype: ${file.mimetype}`);
+        
+        // Define allowed mime types
+        const allowedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        const allowedDocumentTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
+        const allowedTypes = [...allowedImageTypes, ...allowedDocumentTypes];
+        
+        // Check if the file type is allowed
+        if (!allowedTypes.includes(file.mimetype)) {
+            console.log(`❌ Rejected file: ${file.originalname} (${file.mimetype}) - Type not allowed`);
+            return callback(new Error(`File type not allowed: ${file.mimetype}`), false);
+        }
+        
+        // For PDF files, make sure to explicitly check and allow
+        if (file.mimetype === 'application/pdf') {
+            console.log(`✅ Accepted PDF file: ${file.originalname}`);
+            return callback(null, true);
+        }
+        
+        // For image files
+        if (allowedImageTypes.includes(file.mimetype)) {
+            // Additional image validation if needed
+            console.log(`✅ Accepted image file: ${file.originalname}`);
+            return callback(null, true);
+        }
+        
+        // For document files
+        if (allowedDocumentTypes.includes(file.mimetype)) {
+            console.log(`✅ Accepted document file: ${file.originalname}`);
+            return callback(null, true);
+        }
+        
+        // If we get here, something unusual happened
+        console.log(`❓ Unhandled file type: ${file.mimetype} for ${file.originalname}`);
+        return callback(new Error('File type validation failed'), false);
+    },
     limits: {
         fileSize: secureUploadConfig.maxFileSize,
         files: 6,

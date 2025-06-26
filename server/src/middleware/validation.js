@@ -35,7 +35,6 @@ class ValidationMiddleware {
             // Check if slug is unique (would need database check in real implementation)
             isUniqueSlug: async function (value) {
                 // This would typically check database
-                // For now, just validate format
                 return /^[a-z0-9-]+$/.test(value);
             },
 
@@ -96,82 +95,6 @@ class ValidationMiddleware {
 
     // Initialize validation rules with proper context
     initializeValidationRules() {
-        // Auth validation rules
-        this.authValidation = {
-            login: [
-                body('username')
-                    .trim()
-                    .notEmpty()
-                    .withMessage('Username is required')
-                    .isLength({ min: 3, max: 30 })
-                    .withMessage('Username must be between 3 and 30 characters')
-                    .matches(this.commonPatterns.username)
-                    .withMessage('Username contains invalid characters')
-                    .customSanitizer(this.customSanitizers.sanitizeHtml)
-                    .custom(this.customValidators.isNotXSS)
-                    .withMessage('Username contains potentially dangerous content')
-                    .custom(this.customValidators.isNotSQLInjection)
-                    .withMessage('Username contains invalid patterns'),
-
-                body('password')
-                    .notEmpty()
-                    .withMessage('Password is required')
-                    .isLength({ min: 8, max: 128 })
-                    .withMessage('Password must be between 8 and 128 characters'),
-
-                this.handleValidationErrors
-            ],
-
-            register: [
-                body('username')
-                    .trim()
-                    .notEmpty()
-                    .withMessage('Username is required')
-                    .isLength({ min: 3, max: 30 })
-                    .withMessage('Username must be between 3 and 30 characters')
-                    .matches(this.commonPatterns.username)
-                    .withMessage('Username must contain only letters, numbers, underscores, and hyphens')
-                    .customSanitizer(this.customSanitizers.sanitizeHtml)
-                    .custom(this.customValidators.isNotXSS)
-                    .withMessage('Username contains potentially dangerous content'),
-
-                body('email')
-                    .trim()
-                    .notEmpty()
-                    .withMessage('Email is required')
-                    .isEmail()
-                    .withMessage('Must be a valid email address')
-                    .normalizeEmail()
-                    .isLength({ max: 255 })
-                    .withMessage('Email must not exceed 255 characters')
-                    .custom(this.customValidators.isNotXSS)
-                    .withMessage('Email contains potentially dangerous content'),
-
-                body('password')
-                    .notEmpty()
-                    .withMessage('Password is required')
-                    .custom(this.customValidators.isStrongPassword)
-                    .withMessage('Password does not meet security requirements'),
-
-                body('fullName')
-                    .trim()
-                    .notEmpty()
-                    .withMessage('Full name is required')
-                    .isLength({ min: 2, max: 100 })
-                    .withMessage('Full name must be between 2 and 100 characters')
-                    .customSanitizer(this.customSanitizers.sanitizeHtml)
-                    .custom(this.customValidators.isNotXSS)
-                    .withMessage('Full name contains potentially dangerous content'),
-
-                body('role')
-                    .optional()
-                    .matches(this.commonPatterns.role)
-                    .withMessage('Invalid role specified'),
-
-                this.handleValidationErrors
-            ]
-        };
-
         // Notice validation rules
         this.noticeValidation = {
             create: [
@@ -179,67 +102,30 @@ class ValidationMiddleware {
                     .trim()
                     .notEmpty()
                     .withMessage('Title is required')
-                    .isLength({ min: 5, max: 255 })
-                    .withMessage('Title must be between 5 and 255 characters')
-                    .customSanitizer(this.customSanitizers.sanitizeHtml)
-                    .custom(this.customValidators.isNotXSS)
-                    .withMessage('Title contains potentially dangerous content')
-                    .custom(this.customValidators.isNotSQLInjection)
-                    .withMessage('Title contains invalid patterns'),
-
-                body('description')
-                    .trim()
-                    .notEmpty()
-                    .withMessage('Description is required')
-                    .isLength({ min: 10, max: 5000 })
-                    .withMessage('Description must be between 10 and 5000 characters')
-                    .customSanitizer(this.customSanitizers.sanitizeHtml)
-                    .custom(this.customValidators.isNotXSS)
-                    .withMessage('Description contains potentially dangerous content')
-                    .custom(this.customValidators.isNotSQLInjection)
-                    .withMessage('Description contains invalid patterns'),
-
-                body('priority')
-                    .optional()
-                    .matches(this.commonPatterns.priority)
-                    .withMessage('Priority must be low, medium, or high'),
-
-                body('status')
-                    .optional()
-                    .matches(this.commonPatterns.status)
-                    .withMessage('Status must be draft or published'),
-
-                body('slug')
-                    .optional()
-                    .customSanitizer(this.customSanitizers.sanitizeSlug)
-                    .matches(this.commonPatterns.slug)
-                    .withMessage('Slug must contain only lowercase letters, numbers, and hyphens')
-                    .isLength({ min: 3, max: 100 })
-                    .withMessage('Slug must be between 3 and 100 characters'),
-
-                this.handleValidationErrors
-            ],
-
-            update: [
-                param('id')
-                    .matches(this.commonPatterns.objectId)
-                    .withMessage('Invalid notice ID')
-                    .toInt(),
-
-                body('title')
-                    .optional()
-                    .trim()
-                    .isLength({ min: 5, max: 255 })
-                    .withMessage('Title must be between 5 and 255 characters')
+                    .isLength({ min: 5, max: 200 })
+                    .withMessage('Title must be between 5 and 200 characters')
+                    .custom((value) => {
+                        if (value.length > 200) {
+                            throw new Error(`Title is too long (${value.length} characters). Maximum is 200 characters.`);
+                        }
+                        return true;
+                    })
                     .customSanitizer(this.customSanitizers.sanitizeHtml)
                     .custom(this.customValidators.isNotXSS)
                     .withMessage('Title contains potentially dangerous content'),
 
                 body('description')
-                    .optional()
                     .trim()
-                    .isLength({ min: 10, max: 5000 })
-                    .withMessage('Description must be between 10 and 5000 characters')
+                    .notEmpty()
+                    .withMessage('Description is required')
+                    .isLength({ min: 10, max: 10000 })
+                    .withMessage('Description must be between 10 and 10000 characters')
+                    .custom((value) => {
+                        if (value.length > 10000) {
+                            throw new Error(`Description is too long (${value.length} characters). Maximum is 10000 characters.`);
+                        }
+                        return true;
+                    })
                     .customSanitizer(this.customSanitizers.sanitizeHtml)
                     .custom(this.customValidators.isNotXSS)
                     .withMessage('Description contains potentially dangerous content'),
@@ -257,11 +143,39 @@ class ValidationMiddleware {
                 this.handleValidationErrors
             ],
 
-            delete: [
+            update: [
                 param('id')
                     .matches(this.commonPatterns.objectId)
                     .withMessage('Invalid notice ID')
                     .toInt(),
+
+                body('title')
+                    .optional()
+                    .trim()
+                    .isLength({ min: 5, max: 200 })
+                    .withMessage('Title must be between 5 and 200 characters')
+                    .customSanitizer(this.customSanitizers.sanitizeHtml)
+                    .custom(this.customValidators.isNotXSS)
+                    .withMessage('Title contains potentially dangerous content'),
+
+                body('description')
+                    .optional()
+                    .trim()
+                    .isLength({ min: 10, max: 10000 })
+                    .withMessage('Description must be between 10 and 10000 characters')
+                    .customSanitizer(this.customSanitizers.sanitizeHtml)
+                    .custom(this.customValidators.isNotXSS)
+                    .withMessage('Description contains potentially dangerous content'),
+
+                body('priority')
+                    .optional()
+                    .matches(this.commonPatterns.priority)
+                    .withMessage('Priority must be low, medium, or high'),
+
+                body('status')
+                    .optional()
+                    .matches(this.commonPatterns.status)
+                    .withMessage('Status must be draft or published'),
 
                 this.handleValidationErrors
             ],
@@ -275,24 +189,21 @@ class ValidationMiddleware {
                 this.handleValidationErrors
             ],
 
-            getBySlug: [
-                param('slug')
-                    .matches(this.commonPatterns.slug)
-                    .withMessage('Invalid slug format')
+            search: [
+                query('q')
+                    .trim()
+                    .notEmpty()
+                    .withMessage('Search query is required')
                     .isLength({ min: 3, max: 100 })
-                    .withMessage('Slug must be between 3 and 100 characters'),
+                    .withMessage('Search query must be between 3 and 100 characters')
+                    .customSanitizer(this.customSanitizers.sanitizeHtml)
+                    .custom(this.customValidators.isNotXSS)
+                    .withMessage('Search query contains potentially dangerous content'),
 
-                this.handleValidationErrors
-            ]
-        };
-
-        // Query parameter validation
-        this.queryValidation = {
-            pagination: [
                 query('page')
                     .optional()
-                    .isInt({ min: 1, max: 1000 })
-                    .withMessage('Page must be a positive integer (max 1000)')
+                    .isInt({ min: 1 })
+                    .withMessage('Page must be a positive integer')
                     .toInt(),
 
                 query('limit')
@@ -301,59 +212,297 @@ class ValidationMiddleware {
                     .withMessage('Limit must be between 1 and 100')
                     .toInt(),
 
-                query('sort')
+                query('published_only')
                     .optional()
-                    .isIn(['created_at', 'updated_at', 'title', 'priority'])
-                    .withMessage('Invalid sort field'),
+                    .isBoolean()
+                    .withMessage('Published only must be a boolean')
+                    .toBoolean(),
 
-                query('order')
+                this.handleValidationErrors
+            ],
+
+            publish: [
+                param('id')
+                    .matches(this.commonPatterns.objectId)
+                    .withMessage('Invalid notice ID')
+                    .toInt(),
+
+                this.handleValidationErrors
+            ],
+
+            unpublish: [
+                param('id')
+                    .matches(this.commonPatterns.objectId)
+                    .withMessage('Invalid notice ID')
+                    .toInt(),
+
+                this.handleValidationErrors
+            ],
+
+            delete: [
+                param('id')
+                    .matches(this.commonPatterns.objectId)
+                    .withMessage('Invalid notice ID')
+                    .toInt(),
+
+                this.handleValidationErrors
+            ],
+
+            getRelated: [
+                param('id')
+                    .matches(this.commonPatterns.objectId)
+                    .withMessage('Invalid notice ID')
+                    .toInt(),
+
+                query('limit')
                     .optional()
-                    .isIn(['asc', 'desc'])
-                    .withMessage('Order must be asc or desc'),
+                    .isInt({ min: 1, max: 10 })
+                    .withMessage('Limit must be between 1 and 10')
+                    .toInt(),
+
+                this.handleValidationErrors
+            ],
+
+            getBySlug: [
+                param('slug')
+                    .matches(this.commonPatterns.slug)
+                    .withMessage('Invalid slug format')
+                    .customSanitizer(this.customSanitizers.sanitizeSlug),
+
+                this.handleValidationErrors
+            ]
+        };
+
+        // Analytics validation rules
+        this.analyticsValidation = {
+            // Validation for getting notice analytics
+            getNotice: [
+                param('id')
+                    .notEmpty()
+                    .withMessage('Notice ID is required')
+                    .matches(this.commonPatterns.objectId)
+                    .withMessage('Invalid notice ID format')
+                    .toInt(),
+            
+                query('start_date')
+                    .optional()
+                    .isISO8601()
+                    .withMessage('Start date must be a valid date in ISO format (YYYY-MM-DD)')
+                    .toDate(),
+            
+                query('end_date')
+                    .optional()
+                    .isISO8601()
+                    .withMessage('End date must be a valid date in ISO format (YYYY-MM-DD)')
+                    .toDate(),
+            
+                query('group_by')
+                    .optional()
+                    .isIn(['day', 'week', 'month'])
+                    .withMessage('Group by must be day, week, or month'),
+            
+                this.handleValidationErrors
+            ],
+
+            // Validation for site analytics
+            getSite: [
+                query('start_date')
+                    .optional()
+                    .isISO8601()
+                    .withMessage('Start date must be a valid date in ISO format (YYYY-MM-DD)')
+                    .toDate(),
+            
+                query('end_date')
+                    .optional()
+                    .isISO8601()
+                    .withMessage('End date must be a valid date in ISO format (YYYY-MM-DD)')
+                    .toDate(),
+            
+                query('group_by')
+                    .optional()
+                    .isIn(['day', 'week', 'month'])
+                    .withMessage('Group by must be day, week, or month'),
+            
+                this.handleValidationErrors
+            ],
+
+            // Validation for content analytics
+            getContent: [
+                query('limit')
+                    .optional()
+                    .isInt({ min: 1, max: 50 })
+                    .withMessage('Limit must be between 1 and 50')
+                    .toInt(),
+            
+                this.handleValidationErrors
+            ],
+
+            // Validation for exporting analytics data
+            export: [
+                query('type')
+                    .isIn(['notices', 'visits', 'users', 'all'])
+                    .withMessage('Type must be notices, visits, users, or all'),
+            
+                query('format')
+                    .isIn(['csv', 'json', 'excel'])
+                    .withMessage('Format must be csv, json, or excel'),
+            
+                query('start_date')
+                    .optional()
+                    .isISO8601()
+                    .withMessage('Start date must be a valid date in ISO format (YYYY-MM-DD)')
+                    .toDate(),
+            
+                query('end_date')
+                    .optional()
+                    .isISO8601()
+                    .withMessage('End date must be a valid date in ISO format (YYYY-MM-DD)')
+                    .toDate(),
+            
+                this.handleValidationErrors
+            ]
+        };
+
+        // Public routes validation
+        this.publicValidation = {
+            getNotices: [
+                query('page')
+                    .optional()
+                    .isInt({ min: 1 })
+                    .withMessage('Page must be a positive integer')
+                    .toInt(),
+
+                query('limit')
+                    .optional()
+                    .isInt({ min: 1, max: 50 })
+                    .withMessage('Limit must be between 1 and 50')
+                    .toInt(),
+
+                query('priority')
+                    .optional()
+                    .matches(this.commonPatterns.priority)
+                    .withMessage('Priority must be low, medium, or high'),
+
+                query('search')
+                    .optional()
+                    .customSanitizer(this.customSanitizers.sanitizeHtml)
+                    .custom(this.customValidators.isNotXSS)
+                    .withMessage('Search query contains potentially dangerous content'),
+
+                this.handleValidationErrors
+            ],
+
+            getBySlug: [
+                param('slug')
+                    .matches(this.commonPatterns.slug)
+                    .withMessage('Invalid slug format')
+                    .customSanitizer(this.customSanitizers.sanitizeSlug),
 
                 this.handleValidationErrors
             ],
 
             search: [
                 query('q')
-                    .optional()
                     .trim()
-                    .isLength({ min: 1, max: 100 })
-                    .withMessage('Search query must be between 1 and 100 characters')
+                    .notEmpty()
+                    .withMessage('Search query is required')
+                    .isLength({ min: 3, max: 100 })
+                    .withMessage('Search query must be between 3 and 100 characters')
                     .customSanitizer(this.customSanitizers.sanitizeHtml)
                     .custom(this.customValidators.isNotXSS)
-                    .withMessage('Search query contains potentially dangerous content')
-                    .custom(this.customValidators.isNotSQLInjection)
-                    .withMessage('Search query contains invalid patterns'),
+                    .withMessage('Search query contains potentially dangerous content'),
 
-                query('status')
+                query('page')
                     .optional()
-                    .isIn(['draft', 'published', 'all'])
-                    .withMessage('Status filter must be draft, published, or all'),
+                    .isInt({ min: 1 })
+                    .withMessage('Page must be a positive integer')
+                    .toInt(),
 
-                query('priority')
+                query('limit')
                     .optional()
-                    .isIn(['low', 'medium', 'high', 'all'])
-                    .withMessage('Priority filter must be low, medium, high, or all'),
+                    .isInt({ min: 1, max: 50 })
+                    .withMessage('Limit must be between 1 and 50')
+                    .toInt(),
+
+                this.handleValidationErrors
+            ],
+
+            getByPriority: [
+                param('priority')
+                    .matches(this.commonPatterns.priority)
+                    .withMessage('Priority must be low, medium, or high'),
+
+                query('page')
+                    .optional()
+                    .isInt({ min: 1 })
+                    .withMessage('Page must be a positive integer')
+                    .toInt(),
+
+                query('limit')
+                    .optional()
+                    .isInt({ min: 1, max: 50 })
+                    .withMessage('Limit must be between 1 and 50')
+                    .toInt(),
+
+                this.handleValidationErrors
+            ],
+
+            getLatest: [
+                query('limit')
+                    .optional()
+                    .isInt({ min: 1, max: 20 })
+                    .withMessage('Limit must be between 1 and 20')
+                    .toInt(),
+
+                this.handleValidationErrors
+            ],
+
+            getPopular: [
+                query('limit')
+                    .optional()
+                    .isInt({ min: 1, max: 20 })
+                    .withMessage('Limit must be between 1 and 20')
+                    .toInt(),
+
+                query('days')
+                    .optional()
+                    .isInt({ min: 1, max: 90 })
+                    .withMessage('Days must be between 1 and 90')
+                    .toInt(),
+
+                this.handleValidationErrors
+            ],
+
+            getArchive: [
+                query('year')
+                    .optional()
+                    .isInt({ min: 2020, max: 2050 })
+                    .withMessage('Year must be between 2020 and 2050')
+                    .toInt(),
+
+                query('month')
+                    .optional()
+                    .isInt({ min: 1, max: 12 })
+                    .withMessage('Month must be between 1 and 12')
+                    .toInt(),
 
                 this.handleValidationErrors
             ]
         };
 
-        // File upload validation
-        this.fileValidation = {
-            single: [
+        // Upload validation rules
+        this.uploadValidation = {
+            image: [
                 body('description')
                     .optional()
-                    .trim()
                     .isLength({ max: 500 })
-                    .withMessage('File description must not exceed 500 characters')
+                    .withMessage('Description must not exceed 500 characters')
                     .customSanitizer(this.customSanitizers.sanitizeHtml),
 
                 this.handleValidationErrors
             ],
 
-            multiple: [
+            files: [
                 body('descriptions')
                     .optional()
                     .isArray()
@@ -361,34 +510,122 @@ class ValidationMiddleware {
 
                 body('descriptions.*')
                     .optional()
-                    .trim()
                     .isLength({ max: 500 })
-                    .withMessage('Each file description must not exceed 500 characters')
+                    .withMessage('Each description must not exceed 500 characters')
                     .customSanitizer(this.customSanitizers.sanitizeHtml),
+
+                this.handleValidationErrors
+            ],
+
+            list: [
+                query('page')
+                    .optional()
+                    .isInt({ min: 1 })
+                    .withMessage('Page must be a positive integer')
+                    .toInt(),
+
+                query('limit')
+                    .optional()
+                    .isInt({ min: 1, max: 100 })
+                    .withMessage('Limit must be between 1 and 100')
+                    .toInt(),
+
+                query('type')
+                    .optional()
+                    .isIn(['image', 'document', 'all'])
+                    .withMessage('Type must be image, document, or all'),
+
+                this.handleValidationErrors
+            ],
+
+            delete: [
+                param('filename')
+                    .notEmpty()
+                    .withMessage('Filename is required')
+                    .customSanitizer(this.customSanitizers.sanitizeFilename),
 
                 this.handleValidationErrors
             ]
         };
 
-        // Analytics validation
-        this.analyticsValidation = {
-            getStats: [
-                query('startDate')
-                    .optional()
-                    .isISO8601()
-                    .withMessage('Start date must be a valid ISO 8601 date')
-                    .toDate(),
+        // Auth validation rules
+        this.authValidation = {
+            login: [
+                body('username')
+                    .trim()
+                    .matches(this.commonPatterns.username)
+                    .withMessage('Username must be 3-30 characters and contain only letters, numbers, underscores and hyphens'),
 
-                query('endDate')
-                    .optional()
-                    .isISO8601()
-                    .withMessage('End date must be a valid ISO 8601 date')
-                    .toDate(),
+                body('password')
+                    .isLength({ min: 8, max: 128 })
+                    .withMessage('Password must be 8-128 characters'),
 
-                query('groupBy')
+                this.handleValidationErrors
+            ],
+
+            register: [
+                body('username')
+                    .trim()
+                    .matches(this.commonPatterns.username)
+                    .withMessage('Username must be 3-30 characters and contain only letters, numbers, underscores and hyphens'),
+
+                body('email')
+                    .trim()
+                    .matches(this.commonPatterns.email)
+                    .withMessage('Email must be valid'),
+
+                body('password')
+                    .isLength({ min: 8, max: 128 })
+                    .withMessage('Password must be 8-128 characters')
+                    .custom(this.customValidators.isStrongPassword)
+                    .withMessage('Password is not strong enough'),
+
+                body('full_name')
+                    .trim()
+                    .isLength({ min: 3, max: 100 })
+                    .withMessage('Full name must be 3-100 characters')
+                    .customSanitizer(this.customSanitizers.sanitizeHtml),
+
+                body('role')
                     .optional()
-                    .isIn(['day', 'week', 'month'])
-                    .withMessage('Group by must be day, week, or month'),
+                    .matches(this.commonPatterns.role)
+                    .withMessage('Role must be admin or super_admin'),
+
+                this.handleValidationErrors
+            ],
+
+            changePassword: [
+                body('current_password')
+                    .notEmpty()
+                    .withMessage('Current password is required'),
+
+                body('new_password')
+                    .isLength({ min: 8, max: 128 })
+                    .withMessage('New password must be 8-128 characters')
+                    .custom(this.customValidators.isStrongPassword)
+                    .withMessage('New password is not strong enough'),
+
+                body('confirm_password')
+                    .custom((value, { req }) => value === req.body.new_password)
+                    .withMessage('Passwords do not match'),
+
+                this.handleValidationErrors
+            ],
+
+            resetPassword: [
+                body('token')
+                    .notEmpty()
+                    .withMessage('Reset token is required'),
+
+                body('password')
+                    .isLength({ min: 8, max: 128 })
+                    .withMessage('Password must be 8-128 characters')
+                    .custom(this.customValidators.isStrongPassword)
+                    .withMessage('Password is not strong enough'),
+
+                body('confirm_password')
+                    .custom((value, { req }) => value === req.body.password)
+                    .withMessage('Passwords do not match'),
 
                 this.handleValidationErrors
             ]
@@ -411,20 +648,49 @@ class ValidationMiddleware {
             const errors = validationResult(req);
 
             if (!errors.isEmpty()) {
-                const formattedErrors = errors.array().map(error => ({
-                    field: error.path || error.param,
-                    message: error.msg,
-                    value: error.value,
-                    location: error.location
-                }));
+                const formattedErrors = errors.array().map(error => {
+                    // Create more user-friendly error messages
+                    let errorMsg = error.msg;
+                    
+                    // Special handling for common cases
+                    if (error.path === 'title' && error.msg.includes('must be between')) {
+                        errorMsg = `Title length issue: ${error.value ? error.value.length : 0} characters (should be 5-200 characters)`;
+                    }
+                    
+                    if (error.path === 'description' && error.msg.includes('must be between')) {
+                        errorMsg = `Description length issue: ${error.value ? error.value.length : 0} characters (should be 10-10000 characters)`;
+                    }
+                    
+                    return {
+                        field: error.path || error.param,
+                        message: errorMsg,
+                        value: error.value ? 
+                            (typeof error.value === 'string' ? 
+                                (error.value.length > 50 ? error.value.substring(0, 50) + '...' : error.value) 
+                                : 'non-string value') 
+                            : null,
+                        location: error.location
+                    };
+                });
 
                 console.log('🚫 Validation errors:', formattedErrors);
 
+                // Group errors by field for easier client handling
+                const groupedErrors = formattedErrors.reduce((acc, error) => {
+                    if (!acc[error.field]) {
+                        acc[error.field] = [];
+                    }
+                    acc[error.field].push(error.message);
+                    return acc;
+                }, {});
+
                 return res.status(400).json({
                     success: false,
+                    reason: 'validation_failed',
                     error: 'Validation Error',
                     message: 'Request validation failed',
                     errors: formattedErrors,
+                    groupedErrors: groupedErrors,
                     timestamp: new Date().toISOString()
                 });
             }
@@ -545,8 +811,8 @@ const validationMiddleware = new ValidationMiddleware();
 module.exports = {
     auth: validationMiddleware.authValidation,
     notice: validationMiddleware.noticeValidation,
-    query: validationMiddleware.queryValidation,
-    file: validationMiddleware.fileValidation,
+    public: validationMiddleware.publicValidation,
+    upload: validationMiddleware.uploadValidation,
     analytics: validationMiddleware.analyticsValidation,
     validateId: validationMiddleware.validateId,
     validateRequestSize: validationMiddleware.validateRequestSize,

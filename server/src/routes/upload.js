@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const uploadController = require('../controllers/uploadController');
 const { authenticate, authorize } = require('../middleware/auth');
-// const { validateRequest, uploadValidationRules } = require('../middleware/validation'); // Temporarily commented out
+const { validateJSON, sanitizeAll, upload: uploadValidationRules } = require('../middleware/validation');
 const { logApiAccess } = require('../middleware/logging');
 
 // Middleware to log all upload route access
@@ -11,6 +11,10 @@ router.use((req, res, next) => {
   logApiAccess(req, `UPLOAD_ROUTE_${req.method}_${req.path.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase()}`);
   next();
 });
+
+// Global middleware for this router
+router.use(validateJSON);
+router.use(sanitizeAll);
 
 // All upload routes require authentication and admin role
 router.use(authenticate);
@@ -23,8 +27,7 @@ router.use(authorize(['admin', 'super_admin']));
  * @body    FormData with 'image' field
  */
 router.post('/image',
-  // uploadValidationRules.image, // Temporarily commented out
-  // validateRequest,             // Temporarily commented out
+  uploadValidationRules.image,
   uploadController.uploadImage
 );
 
@@ -35,8 +38,7 @@ router.post('/image',
  * @body    FormData with 'files' field (array)
  */
 router.post('/files',
-  // uploadValidationRules.files, // Temporarily commented out
-  // validateRequest,             // Temporarily commented out
+  uploadValidationRules.files,
   uploadController.uploadFiles
 );
 
@@ -47,8 +49,7 @@ router.post('/files',
  * @query   { page, limit, type }
  */
 router.get('/list',
-  // uploadValidationRules.list, // Temporarily commented out
-  // validateRequest,            // Temporarily commented out
+  uploadValidationRules.list,
   uploadController.getUploadedFiles
 );
 
@@ -59,8 +60,7 @@ router.get('/list',
  * @param   filename - File name to delete
  */
 router.delete('/:filename',
-  // uploadValidationRules.delete, // Temporarily commented out
-  // validateRequest,              // Temporarily commented out
+  uploadValidationRules.delete,
   uploadController.deleteFile
 );
 

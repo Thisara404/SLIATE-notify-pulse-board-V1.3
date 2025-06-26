@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const analyticsController = require('../controllers/analyticsController');
 const { authenticate, authorize } = require('../middleware/auth');
-// const { validateRequest, analyticsValidationRules } = require('../middleware/validation'); // Temporarily commented out
+const { validateJSON, sanitizeAll, analytics: analyticsValidationRules } = require('../middleware/validation');
 const { logApiAccess } = require('../middleware/logging');
 
 // Middleware to log all analytics route access
@@ -11,6 +11,10 @@ router.use((req, res, next) => {
   logApiAccess(req, `ANALYTICS_ROUTE_${req.method}_${req.path.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase()}`);
   next();
 });
+
+// Global middleware for this router
+router.use(validateJSON);
+router.use(sanitizeAll);
 
 // All analytics routes require authentication
 router.use(authenticate);
@@ -33,8 +37,7 @@ router.get('/dashboard',
  */
 router.get('/site',
   authorize(['admin', 'super_admin']),
-  // analyticsValidationRules.getSite, // Temporarily commented out
-  // validateRequest,                  // Temporarily commented out
+  analyticsValidationRules.getSite,
   analyticsController.getSiteAnalytics
 );
 
@@ -46,8 +49,7 @@ router.get('/site',
  */
 router.get('/content',
   authorize(['admin', 'super_admin']),
-  // analyticsValidationRules.getContent, // Temporarily commented out
-  // validateRequest,                     // Temporarily commented out
+  analyticsValidationRules.getContent,
   analyticsController.getContentAnalytics
 );
 
@@ -80,8 +82,7 @@ router.get('/security',
  */
 router.get('/notices/:id',
   authorize(['admin', 'super_admin']),
-  // analyticsValidationRules.getNotice, // Temporarily commented out
-  // validateRequest,                    // Temporarily commented out
+  analyticsValidationRules.getNotice,
   analyticsController.getNoticeAnalytics
 );
 
@@ -93,8 +94,7 @@ router.get('/notices/:id',
  */
 router.get('/export',
   authorize(['super_admin']),
-  // analyticsValidationRules.export, // Temporarily commented out
-  // validateRequest,                 // Temporarily commented out
+  analyticsValidationRules.export,
   analyticsController.exportAnalytics
 );
 

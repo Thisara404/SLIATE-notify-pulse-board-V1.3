@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const publicController = require('../controllers/publicController');
-// const { validateRequest, publicValidationRules } = require('../middleware/validation'); // Temporarily commented out
+const { validateJSON, sanitizeAll, public: publicValidationRules } = require('../middleware/validation');
 const { logApiAccess } = require('../middleware/logging');
 
 // Middleware to log all public route access
@@ -10,6 +10,10 @@ router.use((req, res, next) => {
   logApiAccess(req, `PUBLIC_ROUTE_${req.method}_${req.path.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase()}`);
   next();
 });
+
+// Global middleware for this router
+router.use(validateJSON);
+router.use(sanitizeAll);
 
 /**
  * @route   GET /api/public/health
@@ -36,8 +40,7 @@ router.get('/site-info',
  * @query   { page, limit, priority, search, sortBy, sortOrder }
  */
 router.get('/notices',
-  // publicValidationRules.getNotices, // Temporarily commented out
-  // validateRequest,                  // Temporarily commented out
+  publicValidationRules.getNotices,
   ...publicController.getPublishedNotices // Use spread operator for rate-limited endpoints
 );
 
@@ -48,8 +51,7 @@ router.get('/notices',
  * @query   { limit }
  */
 router.get('/notices/latest',
-  // publicValidationRules.getLatest, // Temporarily commented out
-  // validateRequest,                 // Temporarily commented out
+  publicValidationRules.getLatest,
   ...publicController.getLatestNotices // Use spread operator for rate-limited endpoints
 );
 
@@ -60,8 +62,7 @@ router.get('/notices/latest',
  * @query   { limit, days }
  */
 router.get('/notices/popular',
-  // publicValidationRules.getPopular, // Temporarily commented out
-  // validateRequest,                  // Temporarily commented out
+  publicValidationRules.getPopular,
   ...publicController.getPopularNotices // Use spread operator for rate-limited endpoints
 );
 
@@ -73,8 +74,7 @@ router.get('/notices/popular',
  * @query   { page, limit }
  */
 router.get('/notices/priority/:priority',
-  // publicValidationRules.getByPriority, // Temporarily commented out
-  // validateRequest,                      // Temporarily commented out
+  publicValidationRules.getByPriority,
   ...publicController.getNoticesByPriority // Use spread operator for rate-limited endpoints
 );
 
@@ -85,8 +85,7 @@ router.get('/notices/priority/:priority',
  * @query   { year, month }
  */
 router.get('/notices/archive',
-  // publicValidationRules.getArchive, // Temporarily commented out
-  // validateRequest,                  // Temporarily commented out
+  publicValidationRules.getArchive,
   ...publicController.getNoticeArchive // Use spread operator for rate-limited endpoints
 );
 
@@ -97,8 +96,7 @@ router.get('/notices/archive',
  * @query   { q, page, limit }
  */
 router.get('/search',
-  // publicValidationRules.search, // Temporarily commented out
-  // validateRequest,              // Temporarily commented out
+  publicValidationRules.search,
   ...publicController.searchPublishedNotices // Use spread operator for rate-limited endpoints
 );
 
@@ -110,8 +108,7 @@ router.get('/search',
  * @query   { includeStats }
  */
 router.get('/notices/:slug',
-  // publicValidationRules.getBySlug, // Temporarily commented out
-  // validateRequest,                 // Temporarily commented out
+  publicValidationRules.getBySlug,
   ...publicController.getPublishedNoticeBySlug // Use spread operator for rate-limited endpoints
 );
 

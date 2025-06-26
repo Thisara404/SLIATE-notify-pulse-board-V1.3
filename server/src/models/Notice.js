@@ -28,19 +28,16 @@ class Notice {
 
   // Parse files JSON safely
   parseFiles(filesData) {
-    if (!filesData) return [];
+    if (!filesData) return null;
     
     try {
       if (typeof filesData === 'string') {
-        return JSON.parse(filesData) || [];
+        return JSON.parse(filesData);
       }
-      if (Array.isArray(filesData)) {
-        return filesData;
-      }
-      return [];
+      return filesData;
     } catch (error) {
-      console.warn('⚠️ Error parsing notice files:', error.message);
-      return [];
+      console.warn('Failed to parse files data:', error);
+      return null;
     }
   }
 
@@ -151,7 +148,9 @@ class Notice {
         sortBy = 'created_at',
         sortOrder = 'DESC',
         includeStats = false,
-        publishedOnly = false
+        publishedOnly = false,
+        userId = null,
+        showOnlyOwnDrafts = false
       } = options;
 
       // Validate pagination
@@ -206,6 +205,21 @@ class Notice {
         params.push(parseInt(createdBy));
       }
 
+      // Show only own drafts logic or all for super_admin
+      if (showOnlyOwnDrafts && userId) {
+        const userRole = await secureDatabase.executeQuery(
+          `SELECT role FROM users WHERE id = ?`, 
+          [userId]
+        );
+        
+        const isSuperAdmin = userRole.rows[0]?.role === 'super_admin';
+        
+        if (!isSuperAdmin) {
+          query += ` AND (n.status = 'published' OR (n.status = 'draft' AND n.created_by = ?))`;
+          params.push(userId);
+        }
+      }
+
       // Add search filter
       if (search && search.trim().length > 0) {
         query += ` AND (n.title LIKE ? OR n.description LIKE ?)`;
@@ -213,9 +227,23 @@ class Notice {
         params.push(searchTerm, searchTerm);
       }
 
-      // Add sorting and pagination
-      query += ` ORDER BY n.${sortBy} ${sortOrder.toUpperCase()} LIMIT ? OFFSET ?`;
-      params.push(Math.min(100, Math.max(1, limit)), offset);
+      // Add sorting by priority first, then by the requested sort column
+      if (sortBy === 'priority') {
+        // Custom priority ordering
+        query += ` ORDER BY 
+          CASE n.priority 
+            WHEN 'high' THEN 1 
+            WHEN 'medium' THEN 2 
+            WHEN 'low' THEN 3 
+          END ${sortOrder}, n.created_at DESC`;
+      } else {
+        // Default sorting
+        query += ` ORDER BY n.${sortBy} ${sortOrder}`;
+      }
+
+      // Add pagination
+      query += ` LIMIT ? OFFSET ?`;
+      params.push(Math.min(100, Math.max(1, limit)), (Math.max(1, page) - 1) * Math.min(100, Math.max(1, limit)));
 
       // Execute query
       const result = await secureDatabase.executeQuery(query, params);
@@ -239,6 +267,12 @@ class Notice {
       if (createdBy && !isNaN(parseInt(createdBy))) {
         countQuery += ` AND n.created_by = ?`;
         countParams.push(parseInt(createdBy));
+      }
+
+      // Show only own drafts logic for count
+      if (showOnlyOwnDrafts && userId) {
+        countQuery += ` AND (status = 'published' OR (status = 'draft' AND created_by = ?))`;
+        countParams.push(userId);
       }
 
       if (search && search.trim().length > 0) {
@@ -268,35 +302,34 @@ class Notice {
   // Static method to create new notice
   static async create(noticeData, createdBy) {
     try {
-      if (!createdBy || !createdBy.id) {
-        throw new Error('Creator information required');
+      if (!noticeData.title || !noticeData.description) {
+        throw new Error('Title and description are required');
       }
 
-      // Validate required fields
-      const validation = Notice.validateNoticeData(noticeData);
-      if (!validation.isValid) {
-        throw new Error(`Validation failed: ${validation.errors.join(', ')}`);
+      if (!createdBy || !createdBy.id) {
+        throw new Error('Creator information required');
       }
 
       // Generate unique slug
       const slug = await Notice.generateUniqueSlug(noticeData.title);
 
       // Prepare files JSON
-      const filesJson = noticeData.files && noticeData.files.length > 0 ? 
-        JSON.stringify(noticeData.files) : null;
+      const filesJson = noticeData.files && noticeData.files.length > 0 
+        ? JSON.stringify(noticeData.files) 
+        : null;
 
       // Set published_at if status is published
       const publishedAt = noticeData.status === 'published' ? new Date() : null;
 
-      // Insert notice
+      // Insert notice with proper text handling
       const query = `
         INSERT INTO notices (title, description, image_url, files, priority, status, slug, created_by, published_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
       
       const result = await secureDatabase.executeQuery(query, [
-        noticeData.title.trim(),
-        noticeData.description.trim(),
+        String(noticeData.title).trim(),        // Ensure string
+        String(noticeData.description).trim(),  // Ensure string
         noticeData.imageUrl || null,
         filesJson,
         noticeData.priority || 'medium',
@@ -414,7 +447,7 @@ class Notice {
       // Update notice
       updateFields.push('updated_at = NOW()');
       updateValues.push(this.id);
-
+      
       const query = `UPDATE notices SET ${updateFields.join(', ')} WHERE id = ?`;
       
       await secureDatabase.executeQuery(query, updateValues);
@@ -498,89 +531,93 @@ class Notice {
   // Delete associated files
   async deleteAssociatedFiles() {
     try {
-      const filesToDelete = [];
-
-      // Add image file if exists
+      // Delete image file if exists
       if (this.imageUrl) {
-        filesToDelete.push(this.imageUrl);
-      }
-
-      // Add attached files
-      if (this.files && this.files.length > 0) {
-        this.files.forEach(file => {
-          if (file.url) {
-            filesToDelete.push(file.url);
-          }
-        });
-      }
-
-      // Delete files from filesystem
-      for (const fileUrl of filesToDelete) {
+        const imagePath = path.join(__dirname, '../../uploads', this.imageUrl.replace('/uploads/', ''));
         try {
-          // Convert URL to file path
-          const fileName = path.basename(fileUrl);
-          const filePath = path.join(process.cwd(), 'uploads', fileName);
-          
-          await fs.unlink(filePath);
-          console.log(`🗑️ Deleted file: ${fileName}`);
+          await fs.unlink(imagePath);
         } catch (error) {
-          console.warn(`⚠️ Could not delete file ${fileUrl}:`, error.message);
+          console.warn(`Could not delete image file: ${imagePath}`, error.message);
+        }
+      }
+
+      // Delete attachment files if exist
+      if (this.files && Array.isArray(this.files)) {
+        for (const file of this.files) {
+          if (file.url) {
+            const filePath = path.join(__dirname, '../../uploads', file.url.replace('/uploads/', ''));
+            try {
+              await fs.unlink(filePath);
+            } catch (error) {
+              console.warn(`Could not delete file: ${filePath}`, error.message);
+            }
+          }
         }
       }
     } catch (error) {
-      console.error('💥 Error deleting associated files:', error.message);
-      // Don't throw error - file deletion failure shouldn't prevent notice deletion
+      console.warn('Error deleting associated files:', error.message);
     }
   }
 
   // Static method to generate unique slug
   static async generateUniqueSlug(title, excludeId = null) {
     try {
-      // Create base slug from title
+      if (!title || typeof title !== 'string') {
+        throw new Error('Valid title is required to generate slug');
+      }
+
+      // Create base slug - more restrictive to avoid issues
       let baseSlug = title
         .toLowerCase()
         .trim()
-        .replace(/[^a-z0-9\s-]/g, '') // Remove special characters
-        .replace(/\s+/g, '-') // Replace spaces with hyphens
-        .replace(/-+/g, '-') // Replace multiple hyphens with single
-        .replace(/^-+|-+$/g, ''); // Remove leading/trailing hyphens
+        .replace(/[^a-z0-9\s-]/g, '') // Remove special chars except spaces and hyphens
+        .replace(/\s+/g, '-')         // Replace spaces with hyphens
+        .replace(/-+/g, '-')          // Remove consecutive hyphens
+        .replace(/^-+|-+$/g, '');     // Remove leading/trailing hyphens
 
-      if (baseSlug.length === 0) {
-        baseSlug = 'notice';
-      }
+      // Truncate slug to a reasonable length (100 chars max)
+      baseSlug = baseSlug.substring(0, 100);
 
-      // Limit slug length
-      if (baseSlug.length > 100) {
-        baseSlug = baseSlug.substring(0, 100).replace(/-[^-]*$/, '');
+      // If slug is too short after processing, use a fallback
+      if (baseSlug.length < 3) {
+        baseSlug = `notice-${Date.now().toString(36)}`;
       }
 
       let slug = baseSlug;
-      let counter = 0;
+      let counter = 1;
 
-      // Check for uniqueness
       while (true) {
-        let query = `SELECT id FROM notices WHERE slug = ?`;
-        const params = [slug];
-
-        if (excludeId) {
-          query += ` AND id != ?`;
-          params.push(excludeId);
-        }
-
+        // Check if slug exists (excluding current notice if updating)
+        const query = excludeId
+          ? 'SELECT id FROM notices WHERE slug = ? AND id != ? LIMIT 1'
+          : 'SELECT id FROM notices WHERE slug = ? LIMIT 1';
+        
+        const params = excludeId 
+          ? [slug, excludeId]
+          : [slug];
+        
         const result = await secureDatabase.executeQuery(query, params);
-
+        
         if (!result.rows || result.rows.length === 0) {
-          break; // Slug is unique
+          break; // Slug is unique, we can use it
         }
-
-        counter++;
+        
+        // Slug exists, try with counter
         slug = `${baseSlug}-${counter}`;
+        counter++;
+        
+        // If we've tried too many times, add a timestamp to ensure uniqueness
+        if (counter > 10) {
+          slug = `${baseSlug}-${Date.now().toString(36)}`;
+          break;
+        }
       }
-
+      
       return slug;
     } catch (error) {
       console.error('💥 Error generating unique slug:', error.message);
-      throw new Error('Failed to generate unique slug');
+      // Fallback to a timestamp-based slug if there's an error
+      return `notice-${Date.now().toString(36)}`;
     }
   }
 
@@ -735,10 +772,18 @@ class Notice {
 
   // Convert to JSON
   toJSON() {
+    // Handle binary description
+    let description = this.description;
+    if (Buffer.isBuffer(description)) {
+      description = description.toString('utf8');
+    } else if (description && description.data && Array.isArray(description.data)) {
+      description = Buffer.from(description.data).toString('utf8');
+    }
+    
     return {
       id: this.id,
       title: this.title,
-      description: this.description,
+      description: description,
       imageUrl: this.imageUrl,
       files: this.files,
       priority: this.priority,

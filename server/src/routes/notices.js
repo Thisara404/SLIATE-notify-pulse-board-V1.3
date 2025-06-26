@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const noticeController = require('../controllers/noticeController');
 const { authenticate, authorize } = require('../middleware/auth');
-// const { validateRequest, noticeValidationRules } = require('../middleware/validation'); // Temporarily commented out
+const { validateJSON, sanitizeAll, notice: noticeValidationRules } = require('../middleware/validation');
 const { logApiAccess } = require('../middleware/logging');
 const upload = require('../middleware/upload');
 
@@ -13,8 +13,12 @@ router.use((req, res, next) => {
   next();
 });
 
+// Global middleware for this router
+router.use(validateJSON);
+router.use(sanitizeAll);
+
 // --- PUBLIC ROUTE ---
-router.get('/slug/:slug', noticeController.getNoticeBySlug);
+router.get('/slug/:slug', noticeValidationRules.getBySlug, noticeController.getNoticeBySlug);
 
 // All notice routes require authentication
 router.use(authenticate);
@@ -38,9 +42,8 @@ router.get('/',
  */
 router.post('/',
   authorize(['admin', 'super_admin']),
-  // noticeValidationRules.create, // Temporarily commented out
-  // validateRequest,              // Temporarily commented out
   upload.mixedFields,
+  noticeValidationRules.create,
   noticeController.createNotice
 );
 
@@ -52,8 +55,7 @@ router.post('/',
  */
 router.get('/search',
   authorize(['admin', 'super_admin']), 
-  // noticeValidationRules.search, // Temporarily commented out
-  // validateRequest,              // Temporarily commented out
+  noticeValidationRules.search,
   noticeController.searchNotices
 );
 
@@ -66,8 +68,7 @@ router.get('/search',
  */
 router.get('/:id',
   authorize(['admin', 'super_admin']),
-  // noticeValidationRules.getById, // Temporarily commented out
-  // validateRequest,               // Temporarily commented out
+  noticeValidationRules.getById,
   noticeController.getNoticeById
 );
 
@@ -80,9 +81,8 @@ router.get('/:id',
  */
 router.put('/:id',
   authorize(['admin', 'super_admin']),
-  // noticeValidationRules.update, // Temporarily commented out
-  // validateRequest,              // Temporarily commented out
   upload.mixedFields,
+  noticeValidationRules.update,
   noticeController.updateNotice
 );
 
@@ -94,8 +94,7 @@ router.put('/:id',
  */
 router.delete('/:id',
   authorize(['admin', 'super_admin']),
-  // noticeValidationRules.delete, // Temporarily commented out
-  // validateRequest,              // Temporarily commented out
+  noticeValidationRules.delete,
   noticeController.deleteNotice
 );
 
@@ -107,8 +106,7 @@ router.delete('/:id',
  */
 router.post('/:id/publish',
   authorize(['admin', 'super_admin']),
-  // noticeValidationRules.publish, // Temporarily commented out
-  // validateRequest,               // Temporarily commented out
+  noticeValidationRules.publish,
   noticeController.publishNotice
 );
 
@@ -120,8 +118,7 @@ router.post('/:id/publish',
  */
 router.post('/:id/unpublish',
   authorize(['admin', 'super_admin']), 
-  // noticeValidationRules.unpublish, // Temporarily commented out
-  // validateRequest,                // Temporarily commented out
+  noticeValidationRules.unpublish,
   noticeController.unpublishNotice
 );
 
@@ -134,8 +131,7 @@ router.post('/:id/unpublish',
  */
 router.get('/:id/related',
   authorize(['admin', 'super_admin']),
-  // noticeValidationRules.getRelated, // Temporarily commented out
-  // validateRequest,                  // Temporarily commented out
+  noticeValidationRules.getRelated,
   noticeController.getRelatedNotices
 );
 
@@ -148,8 +144,7 @@ router.get('/:id/related',
  */
 router.get('/:id/analytics',
   authorize(['admin', 'super_admin']), 
-  // noticeValidationRules.getAnalytics, // Temporarily commented out
-  // validateRequest,                    // Temporarily commented out
+  noticeValidationRules.getById,
   noticeController.getNoticeAnalytics
 );
 
