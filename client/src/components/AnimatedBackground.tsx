@@ -1,4 +1,3 @@
-
 import { useEffect, useRef } from "react";
 import { useTheme } from "next-themes";
 
@@ -10,47 +9,45 @@ const AnimatedBackground = () => {
     const container = containerRef.current;
     if (!container) return;
 
-    const createDot = () => {
-      const dot = document.createElement('div');
-      dot.className = `absolute w-1 h-1 rounded-full transition-all duration-1000 ${
-        theme === 'dark' 
-          ? 'bg-sliate-light/10 hover:bg-sliate-light/30' 
-          : 'bg-sliate-accent/10 hover:bg-sliate-accent/30'
-      }`;
+    const createVectorElement = () => {
+      const element = document.createElement('div');
       
-      dot.style.left = Math.random() * 100 + '%';
-      dot.style.top = Math.random() * 100 + '%';
-      dot.style.animation = `float ${3 + Math.random() * 4}s ease-in-out infinite`;
-      dot.style.animationDelay = Math.random() * 2 + 's';
+      // Create different vector shapes
+      const shapes = ['vector-dot', 'vector-line', 'vector-curve'];
+      const shapeClass = shapes[Math.floor(Math.random() * shapes.length)];
+      
+      element.className = `absolute transition-all duration-1000 ${shapeClass}`;
+      
+      element.style.left = Math.random() * 100 + '%';
+      element.style.top = Math.random() * 100 + '%';
+      element.style.animation = `vector-float ${4 + Math.random() * 6}s ease-in-out infinite`;
+      element.style.animationDelay = Math.random() * 3 + 's';
 
-      // Add hover effect
-      dot.addEventListener('mouseenter', () => {
-        dot.style.transform = 'scale(8)';
-        dot.style.opacity = '0.6';
-      });
+      // Theme-based styling
+      if (theme === 'dark') {
+        element.style.background = 'linear-gradient(45deg, rgba(184, 207, 206, 0.1), rgba(127, 140, 170, 0.08))';
+        element.style.boxShadow = '0 0 20px rgba(184, 207, 206, 0.1)';
+      } else {
+        element.style.background = 'linear-gradient(45deg, rgba(184, 207, 206, 0.15), rgba(51, 52, 70, 0.1))';
+        element.style.boxShadow = '0 0 15px rgba(184, 207, 206, 0.2)';
+      }
 
-      dot.addEventListener('mouseleave', () => {
-        dot.style.transform = 'scale(1)';
-        dot.style.opacity = '1';
-      });
+      container.appendChild(element);
 
-      container.appendChild(dot);
-
-      // Remove dot after animation
+      // Remove element after animation
       setTimeout(() => {
-        if (container.contains(dot)) {
-          container.removeChild(dot);
+        if (container.contains(element)) {
+          container.removeChild(element);
         }
-      }, 10000);
+      }, 12000);
     };
 
-    // Create initial dots
-    for (let i = 0; i < 15; i++) {
-      setTimeout(createDot, i * 200);
+    // Create initial elements
+    for (let i = 0; i < 6; i++) {
+      setTimeout(createVectorElement, i * 500);
     }
 
-    // Continue creating dots
-    const interval = setInterval(createDot, 1000);
+    const interval = setInterval(createVectorElement, 2000);
 
     return () => {
       clearInterval(interval);
@@ -63,8 +60,8 @@ const AnimatedBackground = () => {
       className="fixed inset-0 pointer-events-none z-0 overflow-hidden"
       style={{
         background: theme === 'dark' 
-          ? 'radial-gradient(circle at 50% 50%, rgba(127, 140, 170, 0.03) 0%, transparent 50%)'
-          : 'radial-gradient(circle at 50% 50%, rgba(184, 207, 206, 0.03) 0%, transparent 50%)'
+          ? 'radial-gradient(circle at 30% 70%, rgba(184, 207, 206, 0.03) 0%, transparent 50%), radial-gradient(circle at 70% 30%, rgba(127, 140, 170, 0.03) 0%, transparent 50%)'
+          : 'radial-gradient(circle at 30% 70%, rgba(184, 207, 206, 0.05) 0%, transparent 50%), radial-gradient(circle at 70% 30%, rgba(51, 52, 70, 0.03) 0%, transparent 50%)'
       }}
     />
   );

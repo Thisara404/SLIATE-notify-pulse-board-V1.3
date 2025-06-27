@@ -14,6 +14,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import VectorBackground from "@/components/VectorBackground";
+import LineArtBackground from "@/components/LineArtBackground";
 
 // Updated interfaces to match the new API response
 interface Notice {
@@ -227,8 +229,8 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-sliate-neutral to-white dark:from-gray-900 dark:to-gray-800">
       <LoadingSpinner />
-      <AnimatedBackground />
-      <EducationalBackground />
+      <VectorBackground />
+      <LineArtBackground />
       <MouseClickEffect />
       <Header />
       
