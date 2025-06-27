@@ -137,78 +137,230 @@ class PublicController {
     // Get published notices (public view)
     getPublishedNotices = async (req, res) => {
         try {
+            const { page = 1, limit = 10, priority, search, sortBy = 'published_at', sortOrder = 'DESC' } = req.query;
+            
             logApiAccess(req, 'GET_PUBLISHED_NOTICES');
-
-            const {
-                page = 1,
-                limit = 10,
-                priority = null,
-                search = null,
-                sortBy = 'published_at',
-                sortOrder = 'DESC'
-            } = req.query;
-
-            // Build options for published notices only
-            const options = {
-                page: parseInt(page),
-                limit: Math.min(50, parseInt(limit)), // Limit to 50 for public API
-                priority,
-                search,
-                publishedOnly: true, // Only published notices
-                sortBy,
-                sortOrder: sortOrder.toUpperCase(),
-                includeStats: false // Don't include detailed stats for public
-            };
-
-            console.log(`📋 Public notices requested with options:`, options);
-
-            // Get published notices
-            const result = await Notice.getAll(options);
-
-            // Sanitize notice data for public (remove sensitive info)
-            const publicNotices = result.notices.map(notice => {
-                const desc = getDescriptionString(notice.description);
-                return {
-                    id: notice.id,
-                    title: notice.title,
-                    description: desc.substring(0, 250) + (desc.length > 250 ? '...' : ''),
-                    imageUrl: notice.imageUrl,
-                    files: notice.files,
-                    priority: notice.priority,
-                    slug: notice.slug,
-                    publishedAt: notice.publishedAt,
-                    creatorName: notice.creatorName,
-                    viewCount: parseInt(notice.viewCount || '0'), // Ensure viewCount is always a number
-                    uniqueViewers: parseInt(notice.uniqueViewers || '0') // Ensure uniqueViewers is always a number
-                };
-            });
-
-            res.status(200).json({
-                success: true,
-                message: 'Published notices retrieved successfully',
-                data: {
-                    notices: publicNotices,
-                    pagination: result.pagination,
-                    filters: {
-                        priority,
-                        search
+            
+            // Step 1: Get distinct dates with notice counts (pagination by dates)
+            let dateQuery = `
+                SELECT 
+                    DATE(published_at) as notice_date,
+                    COUNT(*) as notice_count
+                FROM notices 
+                WHERE status = 'published' AND published_at IS NOT NULL
+            `;
+            
+            const dateParams = [];
+            
+            // Add search filter for dates
+            if (search && search.trim().length > 0) {
+                dateQuery += ` AND (title LIKE ? OR description LIKE ?)`;
+                const searchTerm = `%${search.trim()}%`;
+                dateParams.push(searchTerm, searchTerm);
+            }
+            
+            // Add priority filter for dates
+            if (priority) {
+                dateQuery += ` AND priority = ?`;
+                dateParams.push(priority);
+            }
+            
+            dateQuery += `
+                GROUP BY DATE(published_at)
+                ORDER BY notice_date DESC
+                LIMIT ? OFFSET ?
+            `;
+            
+            const offset = (parseInt(page) - 1) * parseInt(limit);
+            dateParams.push(parseInt(limit), offset);
+            
+            const dateResult = await secureDatabase.executeQuery(dateQuery, dateParams);
+            
+            if (!dateResult.rows || dateResult.rows.length === 0) {
+                return res.status(200).json({
+                    success: true,
+                    message: 'No notices found',
+                    data: {
+                        noticeGroups: [],
+                        pagination: {
+                            page: parseInt(page),
+                            limit: parseInt(limit),
+                            totalDates: 0,
+                            totalPages: 0,
+                            totalNotices: 0
+                        }
                     }
+                });
+            }
+            
+            // Get total count of dates for pagination
+            let countQuery = `
+                SELECT COUNT(DISTINCT DATE(published_at)) as total_dates,
+                       COUNT(*) as total_notices
+                FROM notices 
+                WHERE status = 'published' AND published_at IS NOT NULL
+            `;
+            
+            const countParams = [];
+            if (search && search.trim().length > 0) {
+                countQuery += ` AND (title LIKE ? OR description LIKE ?)`;
+                const searchTerm = `%${search.trim()}%`;
+                countParams.push(searchTerm, searchTerm);
+            }
+            
+            if (priority) {
+                countQuery += ` AND priority = ?`;
+                countParams.push(priority);
+            }
+            
+            const countResult = await secureDatabase.executeQuery(countQuery, countParams);
+            const totalDates = countResult.rows[0]?.total_dates || 0;
+            const totalNotices = countResult.rows[0]?.total_notices || 0;
+            
+            // Step 2: Get all notices for the selected dates
+            const selectedDates = dateResult.rows.map(row => row.notice_date);
+            const placeholders = selectedDates.map(() => 'DATE(published_at) = ?').join(' OR ');
+            
+            let noticesQuery = `
+                SELECT n.*, u.username as creator_username, u.full_name as creator_name
+                FROM notices n
+                LEFT JOIN users u ON n.created_by = u.id
+                WHERE n.status = 'published' 
+                AND n.published_at IS NOT NULL
+                AND (${placeholders})
+            `;
+            
+            const noticesParams = [...selectedDates];
+            
+            // Add search filter for notices
+            if (search && search.trim().length > 0) {
+                noticesQuery += ` AND (n.title LIKE ? OR n.description LIKE ?)`;
+                const searchTerm = `%${search.trim()}%`;
+                noticesParams.push(searchTerm, searchTerm);
+            }
+            
+            // Add priority filter for notices
+            if (priority) {
+                noticesQuery += ` AND n.priority = ?`;
+                noticesParams.push(priority);
+            }
+            
+            // Order by date DESC, then by priority (high -> medium -> low)
+            noticesQuery += `
+                ORDER BY 
+                    DATE(n.published_at) DESC,
+                    CASE n.priority 
+                        WHEN 'high' THEN 1 
+                        WHEN 'medium' THEN 2 
+                        WHEN 'low' THEN 3 
+                        ELSE 4 
+                    END ASC,
+                    n.published_at DESC
+            `;
+            
+            const noticesResult = await secureDatabase.executeQuery(noticesQuery, noticesParams);
+            
+            // Step 3: Group notices by date
+            const noticeGroups = [];
+            const today = new Date().toDateString();
+            
+            selectedDates.forEach(date => {
+                const dateStr = new Date(date).toDateString();
+                const dateNotices = noticesResult.rows.filter(notice => 
+                    new Date(notice.published_at).toDateString() === dateStr
+                );
+                
+                if (dateNotices.length > 0) {
+                    // Process files for each notice
+                    const processedNotices = dateNotices.map(notice => {
+                        const desc = getDescriptionString(notice.description);
+                        
+                        let processedFiles = [];
+                        if (notice.files) {
+                            try {
+                                let filesArray = [];
+                                if (typeof notice.files === 'string') {
+                                    filesArray = JSON.parse(notice.files);
+                            } else if (Array.isArray(notice.files)) {
+                                filesArray = notice.files;
+                            } else if (notice.files.type === 'Buffer' && Array.isArray(notice.files.data)) {
+                                const buffer = Buffer.from(notice.files.data);
+                                const jsonString = buffer.toString('utf8');
+                                filesArray = JSON.parse(jsonString);
+                            }
+                            
+                            processedFiles = filesArray.map(file => ({
+                                name: file.name || file.originalName || 'Unknown File',
+                                url: file.url.startsWith('http') ? file.url : `${req.protocol}://${req.get('host')}${file.url}`,
+                                size: file.size || 0,
+                                type: file.type || file.mimetype || ''
+                            }));
+                        } catch (error) {
+                            console.error('Error processing files for notice', notice.id, ':', error);
+                            processedFiles = [];
+                        }
+                    }
+                    
+                    return {
+                        id: notice.id,
+                        title: notice.title,
+                        description: desc.substring(0, 250) + (desc.length > 250 ? '...' : ''),
+                        imageUrl: notice.image_url,
+                        files: processedFiles,
+                        priority: notice.priority,
+                        slug: notice.slug,
+                        publishedAt: notice.published_at,
+                        creatorName: notice.creator_name,
+                        viewCount: parseInt(notice.view_count || '0'),
+                    };
+                });
+                
+                noticeGroups.push({
+                    date: dateStr,
+                    displayDate: dateStr === today ? 'Today' : new Date(date).toLocaleDateString('en-US', { 
+                        weekday: 'long', 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric' 
+                    }),
+                    isToday: dateStr === today,
+                    notices: processedNotices,
+                    noticeCount: processedNotices.length
+                });
+            }
+        });
+        
+        res.status(200).json({
+            success: true,
+            message: 'Notice groups retrieved successfully',
+            data: {
+                noticeGroups,
+                pagination: {
+                    page: parseInt(page),
+                    limit: parseInt(limit),
+                    totalDates: parseInt(totalDates),
+                    totalPages: Math.ceil(totalDates / parseInt(limit)),
+                    totalNotices: parseInt(totalNotices)
                 },
-                timestamp: new Date().toISOString()
-            });
+                filters: {
+                    priority,
+                    search
+                }
+            },
+            timestamp: new Date().toISOString()
+        });
 
-        } catch (error) {
-            console.error('💥 Get published notices error:', error.message);
+    } catch (error) {
+        console.error('💥 Get published notices error:', error.message);
 
-            res.status(500).json({
-                success: false,
-                error: 'Retrieval Failed',
-                message: 'An error occurred while retrieving notices',
-                timestamp: new Date().toISOString()
-            });
-        }
-    };
-
+        res.status(500).json({
+            success: false,
+            error: 'Retrieval Failed',
+            message: 'An error occurred while retrieving notices',
+            timestamp: new Date().toISOString()
+        });
+    }
+};
     // Get single published notice by slug (public view)
     getPublishedNoticeBySlug = async (req, res) => {
         try {
