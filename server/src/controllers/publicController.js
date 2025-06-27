@@ -141,42 +141,21 @@ class PublicController {
             
             logApiAccess(req, 'GET_PUBLISHED_NOTICES');
             
-            // Step 1: Get distinct dates with notice counts (pagination by dates)
-            let dateQuery = `
-                SELECT 
-                    DATE(published_at) as notice_date,
-                    COUNT(*) as notice_count
-                FROM notices 
-                WHERE status = 'published' AND published_at IS NOT NULL
-            `;
+            // Modified approach: Get more notices to ensure we show recent days
+            const effectiveLimit = Math.max(50, parseInt(limit) * 5); // Ensure we get enough notices
             
-            const dateParams = [];
-            
-            // Add search filter for dates
-            if (search && search.trim().length > 0) {
-                dateQuery += ` AND (title LIKE ? OR description LIKE ?)`;
-                const searchTerm = `%${search.trim()}%`;
-                dateParams.push(searchTerm, searchTerm);
-            }
-            
-            // Add priority filter for dates
-            if (priority) {
-                dateQuery += ` AND priority = ?`;
-                dateParams.push(priority);
-            }
-            
-            dateQuery += `
-                GROUP BY DATE(published_at)
-                ORDER BY notice_date DESC
-                LIMIT ? OFFSET ?
-            `;
-            
-            const offset = (parseInt(page) - 1) * parseInt(limit);
-            dateParams.push(parseInt(limit), offset);
-            
-            const dateResult = await secureDatabase.executeQuery(dateQuery, dateParams);
-            
-            if (!dateResult.rows || dateResult.rows.length === 0) {
+            const result = await Notice.getAll({
+                page: 1, // Always get from page 1 to ensure recent notices
+                limit: effectiveLimit,
+                priority,
+                search,
+                publishedOnly: true,
+                sortBy,
+                sortOrder,
+                includeStats: false
+            });
+
+            if (!result.notices || result.notices.length === 0) {
                 return res.status(200).json({
                     success: true,
                     message: 'No notices found',
@@ -192,95 +171,110 @@ class PublicController {
                     }
                 });
             }
+
+            // Group notices by date
+            const groupedNotices = this.groupNoticesByDate(result.notices, req);
             
-            // Get total count of dates for pagination
-            let countQuery = `
-                SELECT COUNT(DISTINCT DATE(published_at)) as total_dates,
-                       COUNT(*) as total_notices
-                FROM notices 
-                WHERE status = 'published' AND published_at IS NOT NULL
-            `;
+            // Modified pagination: Show recent dates first, ensure yesterday is included if exists
+            const today = new Date().toDateString();
+            const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toDateString();
             
-            const countParams = [];
-            if (search && search.trim().length > 0) {
-                countQuery += ` AND (title LIKE ? OR description LIKE ?)`;
-                const searchTerm = `%${search.trim()}%`;
-                countParams.push(searchTerm, searchTerm);
-            }
+            // Separate today, yesterday, and other dates
+            const todayGroup = groupedNotices.find(group => group.date === today);
+            const yesterdayGroup = groupedNotices.find(group => group.date === yesterday);
+            const otherGroups = groupedNotices.filter(group => 
+                group.date !== today && group.date !== yesterday
+            );
             
-            if (priority) {
-                countQuery += ` AND priority = ?`;
-                countParams.push(priority);
-            }
+            // Reconstruct the array with priority for recent dates
+            const prioritizedGroups = [];
+            if (todayGroup) prioritizedGroups.push(todayGroup);
+            if (yesterdayGroup) prioritizedGroups.push(yesterdayGroup);
+            prioritizedGroups.push(...otherGroups);
             
-            const countResult = await secureDatabase.executeQuery(countQuery, countParams);
-            const totalDates = countResult.rows[0]?.total_dates || 0;
-            const totalNotices = countResult.rows[0]?.total_notices || 0;
+            // Apply pagination to the prioritized groups
+            const startIndex = (parseInt(page) - 1) * parseInt(limit);
+            const endIndex = startIndex + parseInt(limit);
+            const paginatedGroups = prioritizedGroups.slice(startIndex, endIndex);
             
-            // Step 2: Get all notices for the selected dates
-            const selectedDates = dateResult.rows.map(row => row.notice_date);
-            const placeholders = selectedDates.map(() => 'DATE(published_at) = ?').join(' OR ');
+            // Calculate total pages based on total groups
+            const totalPages = Math.ceil(prioritizedGroups.length / parseInt(limit));
             
-            let noticesQuery = `
-                SELECT n.*, u.username as creator_username, u.full_name as creator_name
-                FROM notices n
-                LEFT JOIN users u ON n.created_by = u.id
-                WHERE n.status = 'published' 
-                AND n.published_at IS NOT NULL
-                AND (${placeholders})
-            `;
+            res.status(200).json({
+                success: true,
+                message: 'Notice groups retrieved successfully',
+                data: {
+                    noticeGroups: paginatedGroups,
+                    pagination: {
+                        page: parseInt(page),
+                        limit: parseInt(limit),
+                        totalDates: prioritizedGroups.length,
+                        totalPages: totalPages,
+                        totalNotices: result.notices.length
+                    },
+                    filters: {
+                        priority,
+                        search
+                    }
+                },
+                timestamp: new Date().toISOString()
+            });
+
+        } catch (error) {
+            console.error('💥 Get published notices error:', error.message);
+
+            res.status(500).json({
+                success: false,
+                error: 'Retrieval Failed',
+                message: 'An error occurred while retrieving notices',
+                timestamp: new Date().toISOString()
+            });
+        }
+    };
+
+    // Add this helper method to the PublicController class
+    groupNoticesByDate(notices, req) {
+        try {
+            // Priority order: high -> medium -> low
+            const priorityOrder = { 'high': 1, 'medium': 2, 'low': 3 };
             
-            const noticesParams = [...selectedDates];
-            
-            // Add search filter for notices
-            if (search && search.trim().length > 0) {
-                noticesQuery += ` AND (n.title LIKE ? OR n.description LIKE ?)`;
-                const searchTerm = `%${search.trim()}%`;
-                noticesParams.push(searchTerm, searchTerm);
-            }
-            
-            // Add priority filter for notices
-            if (priority) {
-                noticesQuery += ` AND n.priority = ?`;
-                noticesParams.push(priority);
-            }
-            
-            // Order by date DESC, then by priority (high -> medium -> low)
-            noticesQuery += `
-                ORDER BY 
-                    DATE(n.published_at) DESC,
-                    CASE n.priority 
-                        WHEN 'high' THEN 1 
-                        WHEN 'medium' THEN 2 
-                        WHEN 'low' THEN 3 
-                        ELSE 4 
-                    END ASC,
-                    n.published_at DESC
-            `;
-            
-            const noticesResult = await secureDatabase.executeQuery(noticesQuery, noticesParams);
-            
-            // Step 3: Group notices by date
-            const noticeGroups = [];
+            // Group notices by date
+            const dateGroups = {};
             const today = new Date().toDateString();
             
-            selectedDates.forEach(date => {
-                const dateStr = new Date(date).toDateString();
-                const dateNotices = noticesResult.rows.filter(notice => 
-                    new Date(notice.published_at).toDateString() === dateStr
-                );
+            notices.forEach(notice => {
+                const noticeDate = notice.publishedAt ? new Date(notice.publishedAt).toDateString() : new Date().toDateString();
                 
-                if (dateNotices.length > 0) {
-                    // Process files for each notice
-                    const processedNotices = dateNotices.map(notice => {
-                        const desc = getDescriptionString(notice.description);
-                        
-                        let processedFiles = [];
-                        if (notice.files) {
-                            try {
-                                let filesArray = [];
-                                if (typeof notice.files === 'string') {
-                                    filesArray = JSON.parse(notice.files);
+                if (!dateGroups[noticeDate]) {
+                    dateGroups[noticeDate] = [];
+                }
+                dateGroups[noticeDate].push(notice);
+            });
+
+            // Sort notices within each date group by priority
+            Object.keys(dateGroups).forEach(date => {
+                dateGroups[date].sort((a, b) => {
+                    const priorityA = priorityOrder[a.priority] || 4;
+                    const priorityB = priorityOrder[b.priority] || 4;
+                    return priorityA - priorityB; // Sort by priority first (high -> medium -> low)
+                });
+            });
+
+            // Convert to grouped format and sort dates (today first, then by date descending)
+            const groupedArray = Object.keys(dateGroups).map(date => {
+                const isToday = date === today;
+                const dateObj = new Date(date);
+                
+                // Process notices for this date
+                const processedNotices = dateGroups[date].map(notice => {
+                    const desc = getDescriptionString(notice.description);
+                    
+                    let processedFiles = [];
+                    if (notice.files) {
+                        try {
+                            let filesArray = [];
+                            if (typeof notice.files === 'string') {
+                                filesArray = JSON.parse(notice.files);
                             } else if (Array.isArray(notice.files)) {
                                 filesArray = notice.files;
                             } else if (notice.files.type === 'Buffer' && Array.isArray(notice.files.data)) {
@@ -305,62 +299,44 @@ class PublicController {
                         id: notice.id,
                         title: notice.title,
                         description: desc.substring(0, 250) + (desc.length > 250 ? '...' : ''),
-                        imageUrl: notice.image_url,
+                        imageUrl: notice.imageUrl,
                         files: processedFiles,
                         priority: notice.priority,
                         slug: notice.slug,
-                        publishedAt: notice.published_at,
-                        creatorName: notice.creator_name,
-                        viewCount: parseInt(notice.view_count || '0'),
+                        publishedAt: notice.publishedAt,
+                        creatorName: notice.creatorName,
+                        viewCount: parseInt(notice.viewCount || '0'),
                     };
                 });
                 
-                noticeGroups.push({
-                    date: dateStr,
-                    displayDate: dateStr === today ? 'Today' : new Date(date).toLocaleDateString('en-US', { 
+                return {
+                    date,
+                    displayDate: isToday ? 'Today' : dateObj.toLocaleDateString('en-US', { 
                         weekday: 'long', 
                         year: 'numeric', 
                         month: 'long', 
                         day: 'numeric' 
                     }),
-                    isToday: dateStr === today,
+                    isToday,
                     notices: processedNotices,
                     noticeCount: processedNotices.length
-                });
-            }
-        });
-        
-        res.status(200).json({
-            success: true,
-            message: 'Notice groups retrieved successfully',
-            data: {
-                noticeGroups,
-                pagination: {
-                    page: parseInt(page),
-                    limit: parseInt(limit),
-                    totalDates: parseInt(totalDates),
-                    totalPages: Math.ceil(totalDates / parseInt(limit)),
-                    totalNotices: parseInt(totalNotices)
-                },
-                filters: {
-                    priority,
-                    search
-                }
-            },
-            timestamp: new Date().toISOString()
-        });
+                };
+            });
 
-    } catch (error) {
-        console.error('💥 Get published notices error:', error.message);
+            // Sort groups: today first, then by date descending
+            groupedArray.sort((a, b) => {
+                if (a.isToday) return -1;
+                if (b.isToday) return 1;
+                return new Date(b.date).getTime() - new Date(a.date).getTime();
+            });
 
-        res.status(500).json({
-            success: false,
-            error: 'Retrieval Failed',
-            message: 'An error occurred while retrieving notices',
-            timestamp: new Date().toISOString()
-        });
+            return groupedArray;
+        } catch (error) {
+            console.error('Error grouping notices by date:', error);
+            return [];
+        }
     }
-};
+
     // Get single published notice by slug (public view)
     getPublishedNoticeBySlug = async (req, res) => {
         try {

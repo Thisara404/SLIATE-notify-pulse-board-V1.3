@@ -167,39 +167,37 @@ const Index = () => {
 
   const fetchPublicNotices = async () => {
     try {
-      setIsLoading(true);
-      
-      // Build query params
-      const queryParams = new URLSearchParams();
-      queryParams.append('page', filters.page.toString());
-      queryParams.append('limit', filters.limit.toString());
-      if (filters.priority) queryParams.append('priority', filters.priority);
-      if (filters.search) queryParams.append('search', filters.search);
-      if (filters.timePeriod) queryParams.append('timePeriod', filters.timePeriod);
-      if (filters.category) queryParams.append('category', filters.category);
-      if (filters.department) queryParams.append('department', filters.department);
-      queryParams.append('sortBy', filters.sortBy);
-      queryParams.append('sortOrder', filters.sortOrder);
-      
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/public/notices?${queryParams.toString()}`);
-      
-      if (!response.ok) {
-        throw new Error("Failed to fetch notices");
-      }
-      
-      const data = await response.json();
-      
-      setNotices(data.data.notices);
-      setPagination({
-        page: parseInt(data.data.pagination.page) || 1,
-        limit: parseInt(data.data.pagination.limit) || 50,
-        total: parseInt(data.data.pagination.total) || 0,
-        totalPages: parseInt(data.data.pagination.totalPages) || 1
-      });
+        setIsLoading(true);
+        
+        // Build query params
+        const queryParams = new URLSearchParams();
+        queryParams.append('page', filters.page.toString());
+        queryParams.append('limit', '10'); // Limit dates per page, not notices
+        if (filters.priority) queryParams.append('priority', filters.priority);
+        if (filters.search) queryParams.append('search', filters.search);
+        queryParams.append('sortBy', filters.sortBy);
+        queryParams.append('sortOrder', filters.sortOrder);
+        
+        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/public/notices?${queryParams.toString()}`);
+        
+        if (!response.ok) {
+            throw new Error("Failed to fetch notices");
+        }
+        
+        const data = await response.json();
+        
+        // Data now comes pre-grouped from backend
+        setGroupedNotices(data.data.noticeGroups || []);
+        setPagination({
+            page: parseInt(data.data.pagination.page) || 1,
+            limit: parseInt(data.data.pagination.limit) || 10,
+            total: parseInt(data.data.pagination.totalNotices) || 0,
+            totalPages: parseInt(data.data.pagination.totalPages) || 1
+        });
     } catch (error) {
-      console.error("Failed to fetch public notices:", error);
+        console.error("Failed to fetch public notices:", error);
     } finally {
-      setIsLoading(false);
+        setIsLoading(false);
     }
   };
 

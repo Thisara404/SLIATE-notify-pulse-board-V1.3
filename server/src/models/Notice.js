@@ -175,164 +175,151 @@ class Notice {
   // Static method to get all notices
   static async getAll(options = {}) {
     try {
-      const {
-        page = 1,
-        limit = 10,
-        status = null,
-        priority = null,
-        search = null,
-        createdBy = null,
-        sortBy = 'created_at',
-        sortOrder = 'DESC',
-        includeStats = false,
-        publishedOnly = false,
-        userId = null,
-        showOnlyOwnDrafts = false
-      } = options;
+        const {
+            page = 1,
+            limit = 10,
+            status = null,
+            priority = null,
+            search = null,
+            createdBy = null,
+            sortBy = 'created_at',
+            sortOrder = 'DESC',
+            includeStats = false,
+            publishedOnly = false,
+            userId = null,
+            showOnlyOwnDrafts = false
+        } = options;
 
-      // Validate pagination
-      const offset = (Math.max(1, page) - 1) * Math.min(100, Math.max(1, limit));
-      const validSortColumns = ['id', 'title', 'priority', 'status', 'created_at', 'updated_at', 'published_at'];
-      const validSortOrders = ['ASC', 'DESC'];
+        // Validate pagination
+        const offset = (Math.max(1, page) - 1) * Math.min(100, Math.max(1, limit));
+        const validSortColumns = ['id', 'title', 'priority', 'status', 'created_at', 'updated_at', 'published_at'];
+        const validSortOrders = ['ASC', 'DESC'];
 
-      if (!validSortColumns.includes(sortBy)) {
-        throw new Error('Invalid sort column');
-      }
+        if (!validSortColumns.includes(sortBy)) {
+            throw new Error('Invalid sort column');
+        }
 
-      if (!validSortOrders.includes(sortOrder.toUpperCase())) {
-        throw new Error('Invalid sort order');
-      }
+        if (!validSortOrders.includes(sortOrder.toUpperCase())) {
+            throw new Error('Invalid sort order');
+        }
 
-      // Build base query
-      let query = `
-        SELECT n.*, u.username as creator_username, u.full_name as creator_name
-        ${includeStats ? `, COALESCE(sv.view_count, 0) as view_count, COALESCE(sv.unique_viewers, 0) as unique_viewers` : ''}
-        FROM notices n
-        LEFT JOIN users u ON n.created_by = u.id
-      `;
-
-      if (includeStats) {
-        query += `
-        LEFT JOIN (
-          SELECT notice_id, COUNT(*) as view_count, COUNT(DISTINCT session_id) as unique_viewers
-          FROM site_visits 
-          GROUP BY notice_id
-        ) sv ON n.id = sv.notice_id
+        // Build base query
+        let query = `
+            SELECT n.*, u.username as creator_username, u.full_name as creator_name
+            ${includeStats ? `, COALESCE(sv.view_count, 0) as view_count, COALESCE(sv.unique_viewers, 0) as unique_viewers` : ''}
+            FROM notices n
+            LEFT JOIN users u ON n.created_by = u.id
         `;
-      }
 
-      query += ` WHERE 1=1`;
-      const params = [];
-
-      // Add filters
-      if (publishedOnly) {
-        query += ` AND n.status = 'published' AND n.published_at IS NOT NULL`;
-      } else if (status && ['draft', 'published'].includes(status)) {
-        query += ` AND n.status = ?`;
-        params.push(status);
-      }
-
-      if (priority && ['low', 'medium', 'high'].includes(priority)) {
-        query += ` AND n.priority = ?`;
-        params.push(priority);
-      }
-
-      if (createdBy && !isNaN(parseInt(createdBy))) {
-        query += ` AND n.created_by = ?`;
-        params.push(parseInt(createdBy));
-      }
-
-      // Show only own drafts logic or all for super_admin
-      if (showOnlyOwnDrafts && userId) {
-        const userRole = await secureDatabase.executeQuery(
-          `SELECT role FROM users WHERE id = ?`, 
-          [userId]
-        );
-        
-        const isSuperAdmin = userRole.rows[0]?.role === 'super_admin';
-        
-        if (!isSuperAdmin) {
-          query += ` AND (n.status = 'published' OR (n.status = 'draft' AND n.created_by = ?))`;
-          params.push(userId);
+        if (includeStats) {
+            query += `
+            LEFT JOIN (
+                SELECT notice_id, COUNT(*) as view_count, COUNT(DISTINCT session_id) as unique_viewers
+                FROM site_visits 
+                GROUP BY notice_id
+            ) sv ON n.id = sv.notice_id
+            `;
         }
-      }
 
-      // Add search filter
-      if (search && search.trim().length > 0) {
-        query += ` AND (n.title LIKE ? OR n.description LIKE ?)`;
-        const searchTerm = `%${search.trim()}%`;
-        params.push(searchTerm, searchTerm);
-      }
+        query += ` WHERE 1=1`;
+        const params = [];
 
-      // Add sorting by priority first, then by the requested sort column
-      if (sortBy === 'priority') {
-        // Custom priority ordering
-        query += ` ORDER BY 
-          CASE n.priority 
-            WHEN 'high' THEN 1 
-            WHEN 'medium' THEN 2 
-            WHEN 'low' THEN 3 
-          END ${sortOrder}, n.created_at DESC`;
-      } else {
-        // Default sorting
-        query += ` ORDER BY n.${sortBy} ${sortOrder}`;
-      }
-
-      // Add pagination
-      query += ` LIMIT ? OFFSET ?`;
-      params.push(Math.min(100, Math.max(1, limit)), (Math.max(1, page) - 1) * Math.min(100, Math.max(1, limit)));
-
-      // Execute query
-      const result = await secureDatabase.executeQuery(query, params);
-
-      // Get total count for pagination
-      let countQuery = `SELECT COUNT(*) as total FROM notices n WHERE 1=1`;
-      const countParams = [];
-
-      if (publishedOnly) {
-        countQuery += ` AND n.status = 'published' AND n.published_at IS NOT NULL`;
-      } else if (status && ['draft', 'published'].includes(status)) {
-        countQuery += ` AND n.status = ?`;
-        countParams.push(status);
-      }
-
-      if (priority && ['low', 'medium', 'high'].includes(priority)) {
-        countQuery += ` AND n.priority = ?`;
-        countParams.push(priority);
-      }
-
-      if (createdBy && !isNaN(parseInt(createdBy))) {
-        countQuery += ` AND n.created_by = ?`;
-        countParams.push(parseInt(createdBy));
-      }
-
-      // Show only own drafts logic for count
-      if (showOnlyOwnDrafts && userId) {
-        countQuery += ` AND (status = 'published' OR (status = 'draft' AND created_by = ?))`;
-        countParams.push(userId);
-      }
-
-      if (search && search.trim().length > 0) {
-        countQuery += ` AND (n.title LIKE ? OR n.description LIKE ?)`;
-        const searchTerm = `%${search.trim()}%`;
-        countParams.push(searchTerm, searchTerm);
-      }
-
-      const countResult = await secureDatabase.executeQuery(countQuery, countParams);
-      const total = countResult.rows[0].total;
-
-      return {
-        notices: result.rows.map(row => new Notice(row)),
-        pagination: {
-          page: Math.max(1, page),
-          limit: Math.min(100, Math.max(1, limit)),
-          total,
-          totalPages: Math.ceil(total / Math.min(100, Math.max(1, limit)))
+        // Add filters
+        if (publishedOnly) {
+            query += ` AND n.status = 'published' AND n.published_at IS NOT NULL`;
+        } else if (status) {
+            query += ` AND n.status = ?`;
+            params.push(status);
         }
-      };
+
+        if (priority) {
+            query += ` AND n.priority = ?`;
+            params.push(priority);
+        }
+
+        if (search && search.trim().length > 0) {
+            query += ` AND (n.title LIKE ? OR n.description LIKE ?)`;
+            const searchTerm = `%${search.trim()}%`;
+            params.push(searchTerm, searchTerm);
+        }
+
+        if (createdBy) {
+            query += ` AND n.created_by = ?`;
+            params.push(createdBy);
+        }
+
+        // Handle draft visibility
+        if (showOnlyOwnDrafts && userId) {
+            query += ` AND (n.status = 'published' OR (n.status = 'draft' AND n.created_by = ?))`;
+            params.push(userId);
+        }
+
+        // Add sorting
+        if (sortBy === 'priority') {
+            query += ` ORDER BY CASE n.priority 
+                WHEN 'high' THEN 1 
+                WHEN 'medium' THEN 2 
+                WHEN 'low' THEN 3 
+            END ${sortOrder}, n.created_at DESC`;
+        } else {
+            // Default sorting
+            query += ` ORDER BY n.${sortBy} ${sortOrder}`;
+        }
+
+        // Add pagination
+        query += ` LIMIT ? OFFSET ?`;
+        params.push(Math.min(100, Math.max(1, limit)), offset);
+
+        // Execute query
+        const result = await secureDatabase.executeQuery(query, params);
+
+        // Get total count for pagination
+        let countQuery = `SELECT COUNT(*) as total FROM notices n WHERE 1=1`;
+        const countParams = [];
+
+        if (publishedOnly) {
+            countQuery += ` AND n.status = 'published' AND n.published_at IS NOT NULL`;
+        } else if (status) {
+            countQuery += ` AND n.status = ?`;
+            countParams.push(status);
+        }
+
+        if (priority) {
+            countQuery += ` AND n.priority = ?`;
+            countParams.push(priority);
+        }
+
+        if (search && search.trim().length > 0) {
+            countQuery += ` AND (n.title LIKE ? OR n.description LIKE ?)`;
+            const searchTerm = `%${search.trim()}%`;
+            countParams.push(searchTerm, searchTerm);
+        }
+
+        if (createdBy) {
+            countQuery += ` AND n.created_by = ?`;
+            countParams.push(createdBy);
+        }
+
+        if (showOnlyOwnDrafts && userId) {
+            countQuery += ` AND (n.status = 'published' OR (n.status = 'draft' AND n.created_by = ?))`;
+            countParams.push(userId);
+        }
+
+        const countResult = await secureDatabase.executeQuery(countQuery, countParams);
+        const total = countResult.rows[0].total;
+
+        return {
+            notices: result.rows.map(row => new Notice(row)),
+            pagination: {
+                page: Math.max(1, page),
+                limit: Math.min(100, Math.max(1, limit)),
+                total,
+                totalPages: Math.ceil(total / Math.min(100, Math.max(1, limit)))
+            }
+        };
     } catch (error) {
-      console.error('💥 Error getting all notices:', error.message);
-      throw error;
+        console.error('💥 Error getting all notices:', error.message);
+        throw error;
     }
   }
 
