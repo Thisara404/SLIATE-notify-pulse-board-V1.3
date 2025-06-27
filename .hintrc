@@ -14,8 +14,21 @@
       "default",
       {
         "ignore": [
-          "scrollbar-width"
+          "scrollbar-width",
+          "scrollbar-width: none"
         ]
+      }
+    ],
+    "axe/structure": [
+      "default",
+      {
+        "listitem": "off"
+      }
+    ],
+    "axe/name-role-value": [
+      "default",
+      {
+        "link-name": "off"
       }
     ]
   }

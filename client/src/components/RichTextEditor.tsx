@@ -145,7 +145,52 @@ const RichTextEditor = ({ content, onChange, placeholder = 'Start typing...' }: 
     }
   };
 
-  // Format text with improved link handling
+  // Helper function to check if text is already formatted
+  const isAlreadyFormatted = (text: string, format: string): boolean => {
+    switch (format) {
+      case 'bold':
+        return text.startsWith('**') && text.endsWith('**') && text.length > 4;
+      case 'italic':
+        return text.startsWith('*') && text.endsWith('*') && text.length > 2 && 
+               !(text.startsWith('**') && text.endsWith('**')); // Not bold
+      case 'code':
+        return text.startsWith('`') && text.endsWith('`') && text.length > 2;
+      case 'heading':
+        return text.startsWith('## ');
+      default:
+        return false;
+    }
+  };
+
+  // Helper function to remove formatting
+  const removeFormatting = (text: string, format: string): string => {
+    switch (format) {
+      case 'bold':
+        if (text.startsWith('**') && text.endsWith('**')) {
+          return text.slice(2, -2);
+        }
+        return text;
+      case 'italic':
+        if (text.startsWith('*') && text.endsWith('*') && !text.startsWith('**')) {
+          return text.slice(1, -1);
+        }
+        return text;
+      case 'code':
+        if (text.startsWith('`') && text.endsWith('`')) {
+          return text.slice(1, -1);
+        }
+        return text;
+      case 'heading':
+        if (text.startsWith('## ')) {
+          return text.slice(3);
+        }
+        return text;
+      default:
+        return text;
+    }
+  };
+
+  // Format text with improved toggle functionality
   const handleFormat = (format: string) => {
     if (!textareaRef.current) return;
     
@@ -159,16 +204,37 @@ const RichTextEditor = ({ content, onChange, placeholder = 'Start typing...' }: 
     
     switch (format) {
       case 'bold':
-        formattedText = `**${selectedText}**`;
-        cursorOffset = 2;
+        if (isAlreadyFormatted(selectedText, 'bold')) {
+          // Remove bold formatting
+          formattedText = removeFormatting(selectedText, 'bold');
+          cursorOffset = 0;
+        } else {
+          // Add bold formatting
+          formattedText = `**${selectedText}**`;
+          cursorOffset = 2;
+        }
         break;
       case 'italic':
-        formattedText = `*${selectedText}*`;
-        cursorOffset = 1;
+        if (isAlreadyFormatted(selectedText, 'italic')) {
+          // Remove italic formatting
+          formattedText = removeFormatting(selectedText, 'italic');
+          cursorOffset = 0;
+        } else {
+          // Add italic formatting
+          formattedText = `*${selectedText}*`;
+          cursorOffset = 1;
+        }
         break;
       case 'heading':
-        formattedText = `\n## ${selectedText}`;
-        cursorOffset = 3;
+        if (isAlreadyFormatted(selectedText, 'heading')) {
+          // Remove heading formatting
+          formattedText = removeFormatting(selectedText, 'heading');
+          cursorOffset = 0;
+        } else {
+          // Add heading formatting
+          formattedText = `## ${selectedText}`;
+          cursorOffset = 3;
+        }
         break;
       case 'bulletList':
         // Handle bullet list properly with spaces
@@ -206,8 +272,15 @@ const RichTextEditor = ({ content, onChange, placeholder = 'Start typing...' }: 
         cursorOffset = 3;
         break;
       case 'code':
-        formattedText = `\`${selectedText}\``;
-        cursorOffset = 1;
+        if (isAlreadyFormatted(selectedText, 'code')) {
+          // Remove code formatting
+          formattedText = removeFormatting(selectedText, 'code');
+          cursorOffset = 0;
+        } else {
+          // Add code formatting
+          formattedText = `\`${selectedText}\``;
+          cursorOffset = 1;
+        }
         break;
       case 'link':
         // Improved link handling
@@ -286,7 +359,7 @@ const RichTextEditor = ({ content, onChange, placeholder = 'Start typing...' }: 
           onClick={() => handleFormat('bold')}
           className="h-8 w-8 p-0"
           type="button"
-          title="Bold (Ctrl+B)"
+          title="Bold (Ctrl+B) - Click again to remove"
         >
           <Bold className="h-4 w-4" />
         </Button>
@@ -296,7 +369,7 @@ const RichTextEditor = ({ content, onChange, placeholder = 'Start typing...' }: 
           onClick={() => handleFormat('italic')}
           className="h-8 w-8 p-0"
           type="button"
-          title="Italic (Ctrl+I)"
+          title="Italic (Ctrl+I) - Click again to remove"
         >
           <Italic className="h-4 w-4" />
         </Button>
@@ -306,7 +379,7 @@ const RichTextEditor = ({ content, onChange, placeholder = 'Start typing...' }: 
           onClick={() => handleFormat('heading')}
           className="h-8 w-8 p-0"
           type="button"
-          title="Heading"
+          title="Heading - Click again to remove"
         >
           <Heading className="h-4 w-4" />
         </Button>
@@ -351,7 +424,7 @@ const RichTextEditor = ({ content, onChange, placeholder = 'Start typing...' }: 
           onClick={() => handleFormat('code')}
           className="h-8 w-8 p-0"
           type="button"
-          title="Code"
+          title="Code - Click again to remove"
         >
           <Code className="h-4 w-4" />
         </Button>
