@@ -1,38 +1,87 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
+import { Provider } from 'react-redux';
+import { store } from '@/store';
+import ProtectedRoute from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
 import CreateNotice from "./pages/CreateNotice";
-import NoticeDetails from "./pages/NoticeDetails";
+import EditNotice from "./pages/EditNotice";
+import NoticeDetail from "./pages/NoticeDetails";
 import NotFound from "./pages/NotFound";
+import PublicNoticeDetail from "./pages/PublicNoticeDetail"; // Import the PublicNoticeDetail component
 
 const queryClient = new QueryClient();
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/notice/:id" element={<NoticeDetails />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/create-notice" element={<CreateNotice />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
-    </ThemeProvider>
-  </QueryClientProvider>
+  <Provider store={store}>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <Routes>
+              {/* Public Routes */}
+              <Route path="/" element={<Index />} />
+              <Route path="/login" element={<Login />} />
+              
+              {/* Protected Routes */}
+              <Route 
+                path="/dashboard" 
+                element={
+                  <ProtectedRoute requiredRoles={['admin', 'super_admin']}>
+                    <Dashboard />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/create-notice" 
+                element={
+                  <ProtectedRoute 
+                    requiredRoles={['admin', 'super_admin']}
+                    requiredPermissions={['notice_create']}
+                  >
+                    <CreateNotice />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/edit-notice/:id" 
+                element={
+                  <ProtectedRoute 
+                    requiredRoles={['admin', 'super_admin']}
+                    requiredPermissions={['notice_edit']}
+                  >
+                    <EditNotice />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/notice/:id" 
+                element={
+                  <ProtectedRoute requiredRoles={['admin', 'super_admin']}>
+                    <NoticeDetail />
+                  </ProtectedRoute>
+                } 
+              />
+              
+              {/* Public Notice Detail Route */}
+              <Route path="/public/notice/:slug" element={<PublicNoticeDetail />} />
+              
+              {/* 404 Page */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </TooltipProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
+  </Provider>
 );
 
 export default App;

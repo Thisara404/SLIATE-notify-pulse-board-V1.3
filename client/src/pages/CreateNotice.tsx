@@ -1,108 +1,152 @@
-
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, Upload, Plus, X, Calendar, Building2 } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Upload, Building2, Calendar, FileImage, File, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { noticeService } from "@/services/noticeApi";
+import RichTextEditor from '@/components/RichTextEditor';
+import NoticeTemplates from '@/components/NoticeTemplates';
 
 const CreateNotice = () => {
   const [formData, setFormData] = useState({
-    topic: "",
+    title: "",
     description: "",
-    department: "",
-    category: "academic",
     priority: "medium",
-    expiryDate: "",
-    links: [""],
-    images: [] as File[],
-    attachments: [] as File[]
+    status: "draft",
+    imageFile: null as File | null,
+    files: [] as File[]
   });
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const departments = [
-    "IT",
-    "Management", 
-    "Accountancy",
-    "Tourism & Hospitality Management",
-    "Business Administration"
-  ];
-
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleAddLink = () => {
-    if (formData.links.length < 5) {
-      setFormData(prev => ({ ...prev, links: [...prev.links, ""] }));
-    }
-  };
-
-  const handleLinkChange = (index: number, value: string) => {
-    const newLinks = [...formData.links];
-    newLinks[index] = value;
-    setFormData(prev => ({ ...prev, links: newLinks }));
-  };
-
-  const handleRemoveLink = (index: number) => {
-    const newLinks = formData.links.filter((_, i) => i !== index);
-    setFormData(prev => ({ ...prev, links: newLinks }));
-  };
-
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (formData.images.length + files.length <= 5) {
-      setFormData(prev => ({ ...prev, images: [...prev.images, ...files] }));
-    } else {
-      toast({
-        title: "Image Limit Exceeded",
-        description: "You can upload maximum 5 images per notice",
-        variant: "destructive"
-      });
+    const file = e.target.files?.[0];
+    if (file) {
+      // Check file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        toast({
+          title: "Image Too Large",
+          description: "Image size should not exceed 5MB",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      // Check file type
+      if (!file.type.startsWith('image/')) {
+        toast({
+          title: "Invalid File Type",
+          description: "Please select an image file",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      setFormData(prev => ({ ...prev, imageFile: file }));
     }
   };
 
-  const handleAttachmentUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (formData.attachments.length + files.length <= 5) {
-      setFormData(prev => ({ ...prev, attachments: [...prev.attachments, ...files] }));
-    } else {
-      toast({
-        title: "Attachment Limit Exceeded", 
-        description: "You can upload maximum 5 files per notice",
-        variant: "destructive"
-      });
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newFiles = Array.from(e.target.files || []);
+    if (newFiles.length > 0) {
+      // Check if total files don't exceed max (5)
+      if (formData.files.length + newFiles.length > 5) {
+        toast({
+          title: "Too Many Files",
+          description: "You can upload a maximum of 5 files",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      // Check each file size (max 10MB)
+      const oversizedFiles = newFiles.filter(file => file.size > 10 * 1024 * 1024);
+      if (oversizedFiles.length > 0) {
+        toast({
+          title: "Files Too Large",
+          description: "Each file should not exceed 10MB in size",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      setFormData(prev => ({ 
+        ...prev, 
+        files: [...prev.files, ...newFiles] 
+      }));
     }
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      files: prev.files.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleRemoveImage = () => {
+    setFormData(prev => ({ ...prev, imageFile: null }));
+  };
+
+  // Add simple text sanitizing before submission
+  const sanitizeText = (text: string) => {
+    return text
+      .replace(/'/g, "''") // Escape single quotes
+      .replace(/;/g, '')   // Remove semicolons
+      .replace(/--/g, '')  // Remove SQL comments
+      .replace(/select/gi, 'sel-ect')
+      .replace(/update/gi, 'up-date')
+      .replace(/delete/gi, 'del-ete')
+      .replace(/drop/gi, 'dr-op');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.topic || !formData.description || !formData.department) {
-      toast({
-        title: "Missing Required Fields",
-        description: "Please fill in topic, description, and department",
-        variant: "destructive"
-      });
-      return;
+
+    const sanitizedTitle = sanitizeText(formData.title);
+    const sanitizedDescription = sanitizeText(formData.description);
+
+    const submitData = new FormData();
+    submitData.append('title', sanitizedTitle);
+    submitData.append('description', sanitizedDescription);
+    submitData.append('priority', formData.priority);
+    submitData.append('status', formData.status);
+
+    if (formData.imageFile) {
+      submitData.append('image', formData.imageFile);
     }
 
+    formData.files.forEach((file) => {
+      submitData.append('files', file);
+    });
+
     setIsLoading(true);
-    
-    // Simulate API call
-    setTimeout(() => {
+
+    try {
+      const response = await noticeService.createNotice(submitData);
       toast({
-        title: "Notice Created Successfully",
-        description: "Your notice has been submitted for review"
+        title: 'Notice Created',
+        description: 'Your notice has been successfully created.',
       });
-      navigate("/dashboard");
+      navigate('/dashboard');
+    } catch (error) {
+      toast({
+        title: 'Creation Failed',
+        description: error instanceof Error ? error.message : 'Failed to create notice',
+        variant: 'destructive',
+      });
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   return (
@@ -131,65 +175,32 @@ const CreateNotice = () => {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label htmlFor="topic" className="text-sliate-dark dark:text-white">Notice Topic *</Label>
-                  <Input
-                    id="topic"
-                    value={formData.topic}
-                    onChange={(e) => handleInputChange("topic", e.target.value)}
-                    placeholder="Enter notice topic"
-                    className="border-sliate-accent/30 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center space-x-1">
-                    <Building2 className="h-4 w-4 text-sliate-accent" />
-                    <Label className="text-sliate-dark dark:text-white">Department *</Label>
-                  </div>
-                  <Select value={formData.department} onValueChange={(value) => handleInputChange("department", value)}>
-                    <SelectTrigger className="border-sliate-accent/30 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                      <SelectValue placeholder="Select department" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {departments.map((dept) => (
-                        <SelectItem key={dept} value={dept}>{dept}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
               <div className="space-y-2">
-                <Label htmlFor="description" className="text-sliate-dark dark:text-white">Description *</Label>
-                <Textarea
-                  id="description"
-                  value={formData.description}
-                  onChange={(e) => handleInputChange("description", e.target.value)}
-                  placeholder="Enter detailed description"
-                  className="min-h-32 border-sliate-accent/30 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                <Label htmlFor="title" className="text-sliate-dark dark:text-white">Title *</Label>
+                <Input
+                  id="title"
+                  value={formData.title}
+                  onChange={(e) => handleInputChange("title", e.target.value)}
+                  placeholder="Enter notice title"
+                  className="border-sliate-accent/30 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                   required
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-sliate-dark dark:text-white">Category</Label>
-                  <Select value={formData.category} onValueChange={(value) => handleInputChange("category", value)}>
-                    <SelectTrigger className="border-sliate-accent/30 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="academic">Academic</SelectItem>
-                      <SelectItem value="administrative">Administrative</SelectItem>
-                      <SelectItem value="events">Events</SelectItem>
-                      <SelectItem value="latest">Latest</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="description" className="text-sliate-dark dark:text-white">Description *</Label>
+                <RichTextEditor
+                  content={formData.description}
+                  onChange={(value) => handleInputChange("description", value)}
+                  placeholder="Enter notice description"
+                />
+              </div>
 
+              <div className="flex justify-end mb-2">
+                <NoticeTemplates onSelectTemplate={(template) => handleInputChange("description", template)} />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label className="text-sliate-dark dark:text-white">Priority</Label>
                   <Select value={formData.priority} onValueChange={(value) => handleInputChange("priority", value)}>
@@ -205,100 +216,141 @@ const CreateNotice = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <div className="flex items-center space-x-1">
-                    <Calendar className="h-4 w-4 text-sliate-accent" />
-                    <Label className="text-sliate-dark dark:text-white">Expiry Date</Label>
-                  </div>
-                  <Input
-                    type="date"
-                    value={formData.expiryDate}
-                    onChange={(e) => handleInputChange("expiryDate", e.target.value)}
-                    className="border-sliate-accent/30 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                  />
+                  <Label className="text-sliate-dark dark:text-white">Status</Label>
+                  <Select value={formData.status} onValueChange={(value) => handleInputChange("status", value)}>
+                    <SelectTrigger className="border-sliate-accent/30 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="draft">Draft</SelectItem>
+                      <SelectItem value="published">Published</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sliate-dark dark:text-white">Links (Optional)</Label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleAddLink}
-                    disabled={formData.links.length >= 5}
-                    className="dark:border-gray-600 dark:text-gray-300"
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add Link
-                  </Button>
-                </div>
+              <div className="space-y-2">
+                <Label className="text-sliate-dark dark:text-white">Featured Image (Optional)</Label>
                 
-                {formData.links.map((link, index) => (
-                  <div key={index} className="flex space-x-2">
+                {formData.imageFile ? (
+                  <div className="border border-sliate-accent/30 dark:border-gray-600 rounded-md p-4 relative">
+                    <div className="flex items-center space-x-2">
+                      <FileImage className="h-5 w-5 text-sliate-accent" />
+                      <span className="text-sm text-sliate-dark dark:text-white">{formData.imageFile.name}</span>
+                      <span className="text-xs text-gray-500">
+                        {(formData.imageFile.size / (1024 * 1024)).toFixed(2)}MB
+                      </span>
+                    </div>
+                    
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute top-2 right-2 text-red-500 hover:text-red-700"
+                      onClick={handleRemoveImage}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                    
+                    {/* Preview image if it's an image */}
+                    {formData.imageFile.type.startsWith('image/') && (
+                      <div className="mt-2">
+                        <img 
+                          src={URL.createObjectURL(formData.imageFile)}
+                          alt="Preview"
+                          className="max-h-40 rounded-md"
+                        />
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="border border-dashed border-sliate-accent/30 dark:border-gray-600 rounded-md p-8 text-center">
+                    <FileImage className="h-8 w-8 text-sliate-accent mx-auto mb-2" />
+                    <p className="text-sm text-sliate-dark dark:text-white mb-2">Drag and drop or click to upload</p>
+                    <p className="text-xs text-gray-500 mb-4">Max file size: 5MB</p>
+                    
                     <Input
-                      value={link}
-                      onChange={(e) => handleLinkChange(index, e.target.value)}
-                      placeholder="https://example.com"
-                      className="border-sliate-accent/30 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                      id="image-upload"
+                      type="file"
+                      className="hidden"
+                      accept="image/*"
+                      onChange={handleImageUpload}
                     />
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => handleRemoveLink(index)}
-                      className="dark:border-gray-600 dark:text-gray-300"
+                      onClick={() => document.getElementById('image-upload')?.click()}
+                      className="border-sliate-accent/30 dark:border-gray-600"
                     >
-                      <X className="h-4 w-4" />
+                      <Upload className="h-4 w-4 mr-2" />
+                      Select Image
                     </Button>
                   </div>
-                ))}
+                )}
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label className="text-sliate-dark dark:text-white">Images (Max 5)</Label>
-                  <div className="border-2 border-dashed border-sliate-accent/30 dark:border-gray-600 rounded-lg p-4">
-                    <input
-                      type="file"
-                      multiple
-                      accept="image/*"
-                      onChange={handleImageUpload}
-                      className="hidden"
-                      id="image-upload"
-                    />
-                    <label
-                      htmlFor="image-upload"
-                      className="flex flex-col items-center justify-center cursor-pointer"
-                    >
-                      <Upload className="h-8 w-8 text-sliate-accent mb-2" />
-                      <span className="text-sm text-sliate-accent dark:text-gray-300">
-                        Upload Images ({formData.images.length}/5)
-                      </span>
-                    </label>
-                  </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sliate-dark dark:text-white">Attachments (Optional)</Label>
+                  <span className="text-xs text-gray-500">{formData.files.length}/5 files</span>
                 </div>
-
-                <div className="space-y-2">
-                  <Label className="text-sliate-dark dark:text-white">Attachments (Max 5)</Label>
-                  <div className="border-2 border-dashed border-sliate-accent/30 dark:border-gray-600 rounded-lg p-4">
-                    <input
-                      type="file"
-                      multiple
-                      onChange={handleAttachmentUpload}
-                      className="hidden"
-                      id="attachment-upload"
-                    />
-                    <label
-                      htmlFor="attachment-upload"
-                      className="flex flex-col items-center justify-center cursor-pointer"
-                    >
-                      <Upload className="h-8 w-8 text-sliate-accent mb-2" />
-                      <span className="text-sm text-sliate-accent dark:text-gray-300">
-                        Upload Files ({formData.attachments.length}/5)
-                      </span>
-                    </label>
-                  </div>
+                
+                <div className="border border-dashed border-sliate-accent/30 dark:border-gray-600 rounded-md p-4">
+                  {formData.files.length > 0 && (
+                    <div className="mb-4 space-y-2">
+                      {formData.files.map((file, index) => (
+                        <div 
+                          key={`${file.name}-${index}`} 
+                          className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <File className="h-4 w-4 text-sliate-accent" />
+                            <span className="text-sm text-sliate-dark dark:text-white">{file.name}</span>
+                            <span className="text-xs text-gray-500">
+                              {(file.size / (1024 * 1024)).toFixed(2)}MB
+                            </span>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-500 hover:text-red-700 h-8 w-8 p-0"
+                            onClick={() => handleRemoveFile(index)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {formData.files.length < 5 && (
+                    <div className="text-center py-4">
+                      <File className="h-8 w-8 text-sliate-accent mx-auto mb-2" />
+                      <p className="text-sm text-sliate-dark dark:text-white mb-2">
+                        Drag and drop or click to upload attachments
+                      </p>
+                      <p className="text-xs text-gray-500 mb-4">Max 5 files, 10MB each</p>
+                      
+                      <Input
+                        id="file-upload"
+                        type="file"
+                        multiple
+                        className="hidden"
+                        onChange={handleFileUpload}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => document.getElementById('file-upload')?.click()}
+                        className="border-sliate-accent/30 dark:border-gray-600"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Files
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -308,7 +360,14 @@ const CreateNotice = () => {
                   className="bg-sliate-dark hover:bg-sliate-dark/90 text-white flex-1"
                   disabled={isLoading}
                 >
-                  {isLoading ? "Creating..." : "Create Notice"}
+                  {isLoading ? (
+                    <div className="flex items-center space-x-2">
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Creating Notice...</span>
+                    </div>
+                  ) : (
+                    "Create Notice"
+                  )}
                 </Button>
                 <Button
                   type="button"

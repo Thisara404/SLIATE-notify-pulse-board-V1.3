@@ -1,17 +1,17 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { Filter, Calendar, Flag, Building2 } from "lucide-react";
 
+// Update the interface to match what the server API expects
 interface NoticeFiltersProps {
-  onFilterChange: (filters: { time: string; priority: string; category: string; department: string }) => void;
+  onFilterChange: (filters: any) => void;
 }
 
 const NoticeFilters = ({ onFilterChange }: NoticeFiltersProps) => {
   const [filters, setFilters] = useState({
-    time: "today",
+    timePeriod: "all",
     priority: "all",
     category: "all",
     department: "all"
@@ -26,9 +26,35 @@ const NoticeFilters = ({ onFilterChange }: NoticeFiltersProps) => {
   ];
 
   const handleFilterChange = (key: string, value: string) => {
+    // Create new filters object with the updated value
     const newFilters = { ...filters, [key]: value };
     setFilters(newFilters);
-    onFilterChange(newFilters);
+
+    // Transform filters for the API
+    const apiFilters: any = {};
+    
+    // Handle timePeriod filter
+    if (newFilters.timePeriod !== "all") {
+      apiFilters.timePeriod = newFilters.timePeriod;
+    }
+    
+    // Handle priority filter
+    if (newFilters.priority !== "all") {
+      apiFilters.priority = newFilters.priority;
+    }
+    
+    // Handle category filter
+    if (newFilters.category !== "all") {
+      apiFilters.category = newFilters.category;
+    }
+    
+    // Handle department filter
+    if (newFilters.department !== "all") {
+      apiFilters.department = newFilters.department;
+    }
+    
+    // Pass the transformed filters to the parent component
+    onFilterChange(apiFilters);
   };
 
   return (
@@ -45,16 +71,16 @@ const NoticeFilters = ({ onFilterChange }: NoticeFiltersProps) => {
               <Calendar className="h-4 w-4 text-sliate-accent" />
               <label className="text-sm font-medium text-sliate-dark dark:text-white">Time Period</label>
             </div>
-            <Select value={filters.time} onValueChange={(value) => handleFilterChange("time", value)}>
+            <Select value={filters.timePeriod} onValueChange={(value) => handleFilterChange("timePeriod", value)}>
               <SelectTrigger className="border-sliate-accent/30 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="all">All Time</SelectItem>
                 <SelectItem value="today">Today</SelectItem>
                 <SelectItem value="yesterday">Yesterday</SelectItem>
-                <SelectItem value="week">This Week</SelectItem>
-                <SelectItem value="month">This Month</SelectItem>
-                <SelectItem value="all">All Time</SelectItem>
+                <SelectItem value="this_week">This Week</SelectItem>
+                <SelectItem value="this_month">This Month</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -105,7 +131,7 @@ const NoticeFilters = ({ onFilterChange }: NoticeFiltersProps) => {
               <SelectContent>
                 <SelectItem value="all">All Departments</SelectItem>
                 {departments.map((dept) => (
-                  <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                  <SelectItem key={dept} value={dept.toLowerCase()}>{dept}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

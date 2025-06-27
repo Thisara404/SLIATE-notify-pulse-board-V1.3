@@ -1,4 +1,3 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -130,4 +129,69 @@
 }
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
+}
+
+/* In your global CSS file */
+.notice-content h1, .notice-content h2, .notice-content h3 {
+  color: theme('colors.sliate-dark');
+  margin-top: 1.5em;
+  margin-bottom: 0.75em;
+}
+
+.notice-content p {
+  margin-bottom: 1em;
+  line-height: 1.7;
+}
+
+.notice-content ul, .notice-content ol {
+  margin-left: 1.5em;
+  margin-bottom: 1em;
+}
+
+.notice-content a {
+  color: theme('colors.sliate-accent');
+  text-decoration: underline;
+  transition: all 0.2s ease;
+  word-break: break-all; /* Handle long URLs */
+}
+
+.notice-content a:hover {
+  color: theme('colors.sliate-dark');
+  text-decoration: none;
+  background-color: theme('colors.sliate-accent/10');
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+/* External link indicator */
+.notice-content a[target="_blank"]::after {
+  content: " ↗";
+  font-size: 0.8em;
+  opacity: 0.7;
+}
+
+/* URL text wrapping */
+.notice-content {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.notice-content blockquote {
+  border-left: 4px solid theme('colors.sliate-accent');
+  padding-left: 1em;
+  font-style: italic;
+  margin: 1em 0;
+}
+
+.dark .notice-content h1, .dark .notice-content h2, .dark .notice-content h3 {
+  color: white;
+}
+
+.dark .notice-content a {
+  color: theme('colors.sliate-light');
+}
+
+.dark .notice-content a:hover {
+  color: white;
+  background-color: theme('colors.sliate-light/10');
 }
