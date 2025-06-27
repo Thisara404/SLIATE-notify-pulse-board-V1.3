@@ -3,12 +3,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, Plus, Trash2, Upload, Building2, Calendar, FileImage, File, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { noticeService } from "@/services/noticeApi";
+import RichTextEditor from '@/components/RichTextEditor';
+import NoticeTemplates from '@/components/NoticeTemplates';
 
 const CreateNotice = () => {
   const [formData, setFormData] = useState({
@@ -188,14 +189,15 @@ const CreateNotice = () => {
 
               <div className="space-y-2">
                 <Label htmlFor="description" className="text-sliate-dark dark:text-white">Description *</Label>
-                <Textarea
-                  id="description"
-                  value={formData.description}
-                  onChange={(e) => handleInputChange("description", e.target.value)}
+                <RichTextEditor
+                  content={formData.description}
+                  onChange={(value) => handleInputChange("description", value)}
                   placeholder="Enter notice description"
-                  className="min-h-32 border-sliate-accent/30 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                  required
                 />
+              </div>
+
+              <div className="flex justify-end mb-2">
+                <NoticeTemplates onSelectTemplate={(template) => handleInputChange("description", template)} />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

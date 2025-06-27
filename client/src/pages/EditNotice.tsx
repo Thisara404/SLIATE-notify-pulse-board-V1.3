@@ -4,12 +4,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Upload, X, File, Loader2, Save, Eye } from "lucide-react";
 import { noticeService, Notice } from "@/services/noticeApi";
+import RichTextEditor from '@/components/RichTextEditor';
+import NoticeTemplates from '@/components/NoticeTemplates';
+import NoticeContent from '@/components/NoticeContent';
 
 const EditNotice = () => {
   const { id } = useParams<{ id: string }>();
@@ -339,13 +341,10 @@ const EditNotice = () => {
 
               <div className="space-y-2">
                 <Label htmlFor="description" className="text-sliate-dark dark:text-white">Description *</Label>
-                <Textarea
-                  id="description"
-                  value={formData.description}
-                  onChange={(e) => handleInputChange("description", e.target.value)}
+                <RichTextEditor
+                  content={formData.description}
+                  onChange={(value) => handleInputChange("description", value)}
                   placeholder="Enter notice description"
-                  className="min-h-32 border-sliate-accent/30 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                  required
                 />
               </div>
 

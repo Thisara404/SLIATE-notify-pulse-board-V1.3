@@ -19,6 +19,9 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { noticeService, Notice } from "@/services/noticeApi";
+import MarkdownRenderer from '@/components/MarkdownRenderer';
+import { sanitizeHtml } from '@/utils/sanitize';
+import NoticeContent from '@/components/NoticeContent';
 
 const NoticeDetail = ({ publicMode = false }) => {
   const { id } = useParams<{ id: string }>();
@@ -294,19 +297,26 @@ const NoticeDetail = ({ publicMode = false }) => {
             {notice.imageUrl && (
               <div className="flex justify-center">
                 <img 
-                  src={`http://localhost:5000${notice.imageUrl.startsWith('/') ? '' : '/'}${notice.imageUrl}`}
+                  src={notice.imageUrl.startsWith('http') 
+                    ? notice.imageUrl 
+                    : `http://localhost:5000${notice.imageUrl.startsWith('/') ? '' : '/'}${notice.imageUrl}`}
                   alt={notice.title}
                   className="max-w-full max-h-96 object-contain rounded-md shadow-md"
                   onError={(e) => {
-                    // If image fails to load, try alternative path
+                    // Try alternative paths if image fails to load
                     const target = e.target as HTMLImageElement;
-                    const baseUrl = 'http://localhost:5000';
-                    const imagePath = notice.imageUrl;
+                    if (target.src.includes('?attempt=')) return; // Prevent infinite retries
                     
-                    if (!target.src.includes('/uploads/')) {
-                      target.src = `${baseUrl}/uploads/${imagePath}`;
-                    } else if (!target.src.includes('/uploads/images/')) {
-                      target.src = `${baseUrl}/uploads/images/${imagePath.split('/').pop()}`;
+                    // Try different paths
+                    const attempts = [
+                      `http://localhost:5000/uploads/${notice.imageUrl.split('/').pop()}`,
+                      `http://localhost:5000/uploads/images/${notice.imageUrl.split('/').pop()}`,
+                      `http://localhost:5000${notice.imageUrl}`
+                    ];
+                    
+                    const currentAttempt = parseInt(new URLSearchParams(target.src.split('?')[1] || '').get('attempt') || '0');
+                    if (currentAttempt < attempts.length) {
+                      target.src = `${attempts[currentAttempt]}?attempt=${currentAttempt + 1}`;
                     } else {
                       // If all attempts fail, hide the image
                       target.style.display = 'none';
@@ -317,27 +327,7 @@ const NoticeDetail = ({ publicMode = false }) => {
             )}
             
             {/* Notice Description */}
-            <div className="prose dark:prose-invert max-w-none">
-              <div className="text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
-                {(() => {
-                  const desc = notice.description;
-
-                  // Helper function to decode binary data
-                  const decodeBinaryData = (data: Uint8Array): string => {
-                    const decoder = new TextDecoder("utf-8");
-                    return decoder.decode(data);
-                  };
-
-                  if (typeof desc === 'string') {
-                    return desc;
-                  }
-                  if (desc && desc.type === 'Buffer' && Array.isArray(desc.data)) {
-                    return decodeBinaryData(new Uint8Array(desc.data));
-                  }
-                  return desc?.toString() || "No description available";
-                })()}
-              </div>
-            </div>
+            <NoticeContent content={notice.description} className="mt-4" />
             
             {/* Files */}
             {notice.files && notice.files.length > 0 && (
