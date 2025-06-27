@@ -22,15 +22,77 @@ const RichTextEditor = ({ content, onChange, placeholder = 'Start typing...' }: 
   // Update local content when prop changes from parent
   useEffect(() => {
     setLocalContent(content);
+    // Update history when content changes from parent
+    if (content !== history[historyIndex]) {
+      const newHistory = [...history.slice(0, historyIndex + 1), content];
+      setHistory(newHistory);
+      setHistoryIndex(newHistory.length - 1);
+    }
   }, [content]);
 
-  // Handle local content change
+  // Auto-detect and convert URLs to markdown links
+  const autoLinkUrls = (text: string): string => {
+    // URL regex pattern
+    const urlPattern = /((?:https?:\/\/|www\.)[^\s<>"']+[^\s<>"'.,;:])/gi;
+    
+    return text.replace(urlPattern, (url) => {
+      // Don't convert if it's already in markdown link format
+      const beforeUrl = text.substring(0, text.indexOf(url));
+      const afterUrl = text.substring(text.indexOf(url) + url.length);
+      
+      // Check if URL is already wrapped in markdown link syntax
+      if (beforeUrl.endsWith('](') || beforeUrl.endsWith('[') || afterUrl.startsWith(')')) {
+        return url; // Don't convert, it's already a markdown link
+      }
+      
+      // Add protocol if missing
+      const fullUrl = url.startsWith('http') ? url : `https://${url}`;
+      
+      // Create markdown link
+      return `[${url}](${fullUrl})`;
+    });
+  };
+
+  // Handle local content change with auto-linking
   const handleLocalChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newContent = e.target.value;
+    let newContent = e.target.value;
+    
+    // Check if user just typed a space or enter after a URL
+    const cursorPosition = e.target.selectionStart;
+    const lastChar = newContent[cursorPosition - 1];
+    
+    if (lastChar === ' ' || lastChar === '\n') {
+      // Get the word before the cursor
+      const beforeCursor = newContent.substring(0, cursorPosition - 1);
+      const words = beforeCursor.split(/\s+/);
+      const lastWord = words[words.length - 1];
+      
+      // Check if last word is a URL
+      const urlPattern = /^(?:https?:\/\/|www\.)[^\s<>"']+[^\s<>"'.,;:]$/i;
+      if (urlPattern.test(lastWord)) {
+        // Convert to markdown link
+        const fullUrl = lastWord.startsWith('http') ? lastWord : `https://${lastWord}`;
+        const markdownLink = `[${lastWord}](${fullUrl})`;
+        
+        // Replace the URL with markdown link
+        const beforeUrl = newContent.substring(0, cursorPosition - lastWord.length - 1);
+        const afterUrl = newContent.substring(cursorPosition - 1);
+        newContent = beforeUrl + markdownLink + afterUrl;
+        
+        // Update cursor position
+        setTimeout(() => {
+          if (textareaRef.current) {
+            const newPosition = beforeUrl.length + markdownLink.length + 1;
+            textareaRef.current.setSelectionRange(newPosition, newPosition);
+          }
+        }, 0);
+      }
+    }
+    
     setLocalContent(newContent);
     onChange(newContent);
     
-    // Add to history
+    // Add to history only if content is different
     if (newContent !== history[historyIndex]) {
       const newHistory = history.slice(0, historyIndex + 1);
       newHistory.push(newContent);
@@ -61,20 +123,29 @@ const RichTextEditor = ({ content, onChange, placeholder = 'Start typing...' }: 
 
   // Key command handling for undo/redo
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Handle Ctrl+Z or Command+Z (undo)
+    // Handle Ctrl+Z (undo)
     if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
       e.preventDefault();
       handleUndo();
     }
-    // Handle Ctrl+Shift+Z or Command+Shift+Z or Ctrl+Y (redo)
-    if (((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'z') || 
-        ((e.ctrlKey || e.metaKey) && e.key === 'y')) {
+    // Handle Ctrl+Shift+Z (redo)
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'Z') {
       e.preventDefault();
       handleRedo();
     }
+    // Handle Ctrl+Y (alternative redo)
+    if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+      e.preventDefault();
+      handleRedo();
+    }
+    // Handle Ctrl+K for quick link insertion
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      handleFormat('link');
+    }
   };
 
-  // Format text
+  // Format text with improved link handling
   const handleFormat = (format: string) => {
     if (!textareaRef.current) return;
     
@@ -100,29 +171,61 @@ const RichTextEditor = ({ content, onChange, placeholder = 'Start typing...' }: 
         cursorOffset = 3;
         break;
       case 'bulletList':
-        formattedText = selectedText.split('\n').map(line => `- ${line}`).join('\n');
+        // Handle bullet list properly with spaces
+        if (selectedText.includes('\n')) {
+          // Multiple lines - format each line as a bullet point
+          formattedText = selectedText
+            .split('\n')
+            .map(line => line.trim() ? `- ${line.trim()}` : '')
+            .join('\n');
+        } else {
+          // Single line - add bullet point
+          formattedText = `- ${selectedText}`;
+        }
         cursorOffset = 2;
         break;
       case 'orderedList':
-        // Check if we have multiple lines
+        // Handle ordered list properly with spaces and numbering
         if (selectedText.includes('\n')) {
-          // Format each line as a list item with proper spacing
-          formattedText = selectedText
-            .split('\n')
-            .map((line, i) => `${i + 1}. ${line}`)
+          // Multiple lines - format each non-empty line as a numbered list item
+          const lines = selectedText.split('\n');
+          let counter = 1;
+          formattedText = lines
+            .map(line => {
+              const trimmedLine = line.trim();
+              if (trimmedLine) {
+                return `${counter++}. ${trimmedLine}`;
+              }
+              return ''; // Empty lines remain empty
+            })
             .join('\n');
         } else {
-          // Single line case - add proper markdown list spacing
+          // Single line - add number
           formattedText = `1. ${selectedText}`;
         }
-        cursorOffset = selectedText.includes('\n') ? 3 : 3;
+        cursorOffset = 3;
         break;
       case 'code':
         formattedText = `\`${selectedText}\``;
         cursorOffset = 1;
         break;
       case 'link':
-        formattedText = `[${selectedText}](url)`;
+        // Improved link handling
+        if (selectedText) {
+          // Check if selected text is already a URL
+          const urlPattern = /^(?:https?:\/\/|www\.)[^\s<>"']+[^\s<>"'.,;:]$/i;
+          if (urlPattern.test(selectedText)) {
+            // Selected text is a URL, use it as both text and URL
+            const fullUrl = selectedText.startsWith('http') ? selectedText : `https://${selectedText}`;
+            formattedText = `[${selectedText}](${fullUrl})`;
+          } else {
+            // Selected text is not a URL, prompt for URL or use placeholder
+            formattedText = `[${selectedText}](https://google.com)`;
+          }
+        } else {
+          // No selection, create template
+          formattedText = `[Link text](https://google.com)`;
+        }
         cursorOffset = 1;
         break;
       default:
@@ -146,12 +249,32 @@ const RichTextEditor = ({ content, onChange, placeholder = 'Start typing...' }: 
     setTimeout(() => {
       if (textareaRef.current) {
         textareaRef.current.focus();
-        textareaRef.current.setSelectionRange(
-          start + cursorOffset, 
-          start + selectedText.length + cursorOffset
-        );
+        if (format === 'link' && selectedText) {
+          // For links, select the URL part for easy editing
+          const linkStart = start + formattedText.indexOf('](') + 2;
+          const linkEnd = start + formattedText.indexOf(')', linkStart);
+          textareaRef.current.setSelectionRange(linkStart, linkEnd);
+        } else {
+          textareaRef.current.setSelectionRange(
+            start + cursorOffset, 
+            start + cursorOffset
+          );
+        }
       }
     }, 0);
+  };
+
+  // Convert all URLs to markdown links when switching to preview
+  const handlePreviewToggle = () => {
+    if (!isPreviewMode) {
+      // Converting to preview - auto-link any remaining URLs
+      const autoLinkedContent = autoLinkUrls(localContent);
+      if (autoLinkedContent !== localContent) {
+        setLocalContent(autoLinkedContent);
+        onChange(autoLinkedContent);
+      }
+    }
+    setIsPreviewMode(!isPreviewMode);
   };
 
   return (
@@ -163,6 +286,7 @@ const RichTextEditor = ({ content, onChange, placeholder = 'Start typing...' }: 
           onClick={() => handleFormat('bold')}
           className="h-8 w-8 p-0"
           type="button"
+          title="Bold (Ctrl+B)"
         >
           <Bold className="h-4 w-4" />
         </Button>
@@ -172,6 +296,7 @@ const RichTextEditor = ({ content, onChange, placeholder = 'Start typing...' }: 
           onClick={() => handleFormat('italic')}
           className="h-8 w-8 p-0"
           type="button"
+          title="Italic (Ctrl+I)"
         >
           <Italic className="h-4 w-4" />
         </Button>
@@ -181,6 +306,7 @@ const RichTextEditor = ({ content, onChange, placeholder = 'Start typing...' }: 
           onClick={() => handleFormat('heading')}
           className="h-8 w-8 p-0"
           type="button"
+          title="Heading"
         >
           <Heading className="h-4 w-4" />
         </Button>
@@ -192,6 +318,7 @@ const RichTextEditor = ({ content, onChange, placeholder = 'Start typing...' }: 
           onClick={() => handleFormat('bulletList')}
           className="h-8 w-8 p-0"
           type="button"
+          title="Bullet List"
         >
           <List className="h-4 w-4" />
         </Button>
@@ -201,6 +328,7 @@ const RichTextEditor = ({ content, onChange, placeholder = 'Start typing...' }: 
           onClick={() => handleFormat('orderedList')}
           className="h-8 w-8 p-0"
           type="button"
+          title="Numbered List"
         >
           <ListOrdered className="h-4 w-4" />
         </Button>
@@ -213,6 +341,7 @@ const RichTextEditor = ({ content, onChange, placeholder = 'Start typing...' }: 
           onClick={() => handleFormat('link')}
           className="h-8 w-8 p-0"
           type="button"
+          title="Link (Ctrl+K)"
         >
           <LinkIcon className="h-4 w-4" />
         </Button>
@@ -222,6 +351,7 @@ const RichTextEditor = ({ content, onChange, placeholder = 'Start typing...' }: 
           onClick={() => handleFormat('code')}
           className="h-8 w-8 p-0"
           type="button"
+          title="Code"
         >
           <Code className="h-4 w-4" />
         </Button>
@@ -246,14 +376,14 @@ const RichTextEditor = ({ content, onChange, placeholder = 'Start typing...' }: 
           disabled={historyIndex >= history.length - 1}
           className="h-8 w-8 p-0"
           type="button"
-          title="Redo (Ctrl+Y)"
+          title="Redo (Ctrl+Shift+Z)"
         >
           <Redo className="h-4 w-4" />
         </Button>
         
         <div className="ml-auto flex gap-1">
           <Button
-            variant={isPreviewMode ? "default" : "outline"}
+            variant={!isPreviewMode ? "default" : "outline"}
             size="sm"
             onClick={() => setIsPreviewMode(false)}
             className="flex items-center gap-1"
@@ -263,9 +393,9 @@ const RichTextEditor = ({ content, onChange, placeholder = 'Start typing...' }: 
             Edit
           </Button>
           <Button
-            variant={isPreviewMode ? "outline" : "default"}
+            variant={isPreviewMode ? "default" : "outline"}
             size="sm"
-            onClick={() => setIsPreviewMode(true)}
+            onClick={handlePreviewToggle}
             className="flex items-center gap-1"
             type="button"
           >

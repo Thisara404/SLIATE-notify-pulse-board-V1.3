@@ -151,6 +151,29 @@
 .notice-content a {
   color: theme('colors.sliate-accent');
   text-decoration: underline;
+  transition: all 0.2s ease;
+  word-break: break-all; /* Handle long URLs */
+}
+
+.notice-content a:hover {
+  color: theme('colors.sliate-dark');
+  text-decoration: none;
+  background-color: theme('colors.sliate-accent/10');
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+/* External link indicator */
+.notice-content a[target="_blank"]::after {
+  content: " ↗";
+  font-size: 0.8em;
+  opacity: 0.7;
+}
+
+/* URL text wrapping */
+.notice-content {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .notice-content blockquote {
@@ -166,4 +189,9 @@
 
 .dark .notice-content a {
   color: theme('colors.sliate-light');
+}
+
+.dark .notice-content a:hover {
+  color: white;
+  background-color: theme('colors.sliate-light/10');
 }
