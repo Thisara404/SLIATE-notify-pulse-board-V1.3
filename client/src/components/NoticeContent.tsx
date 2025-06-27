@@ -1,6 +1,5 @@
 import { sanitizeHtml } from '@/utils/sanitize';
 import { Card } from '@/components/ui/card';
-import { binaryToString } from '@/utils/binaryUtils';
 import MarkdownRenderer from './MarkdownRenderer';
 
 interface NoticeContentProps {
@@ -9,15 +8,24 @@ interface NoticeContentProps {
 }
 
 const NoticeContent = ({ content, className = "" }: NoticeContentProps) => {
-  // Process content - handle various formats
+  // Process content - handle various formats with proper UTF-8 encoding
   const processContent = (rawContent: any): string => {
     if (typeof rawContent === 'string') {
       return rawContent;
     }
     
-    // Handle MySQL binary data
+    // Handle MySQL binary data with proper UTF-8 decoding
     if (rawContent && rawContent.type === 'Buffer' && Array.isArray(rawContent.data)) {
-      return binaryToString(rawContent.data);
+      try {
+        // Use TextDecoder for proper UTF-8 handling of Sinhala text
+        const uint8Array = new Uint8Array(rawContent.data);
+        const decoder = new TextDecoder('utf-8');
+        return decoder.decode(uint8Array);
+      } catch (error) {
+        console.error('Failed to decode binary content:', error);
+        // Fallback to basic string conversion
+        return String.fromCharCode.apply(null, rawContent.data);
+      }
     }
     
     return String(rawContent || '');

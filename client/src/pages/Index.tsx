@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
-import { Search, Calendar, Mail, Phone, MapPin, Clock, Bell, Users, BookOpen, Award } from "lucide-react";
+import { Search, Calendar, Mail, Phone, MapPin, Clock, Bell, Users, BookOpen, Award, ChevronDown, ChevronUp } from "lucide-react";
 import Header from "@/components/Header";
 import VisitorStats from "@/components/VisitorStats";
 import NoticeFilters from "@/components/NoticeFilters";
@@ -13,6 +13,7 @@ import MouseClickEffect from "@/components/MouseClickEffect";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 // Add this type definition at the top to match your API response
 interface Notice {
@@ -27,6 +28,13 @@ interface Notice {
   viewCount?: number;
   uniqueViewers?: number;
   files?: Array<{ name: string; url: string; size?: number; type?: string }>;
+}
+
+interface GroupedNotices {
+  date: string;
+  displayDate: string;
+  isToday: boolean;
+  notices: Notice[];
 }
 
 const upcomingEvents = [
@@ -52,25 +60,27 @@ const upcomingEvents = [
 
 const Index = () => {
   const [notices, setNotices] = useState<Notice[]>([]);
+  const [groupedNotices, setGroupedNotices] = useState<GroupedNotices[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filters, setFilters] = useState({
     page: 1,
-    limit: 10,
+    limit: 50, // Increase limit to get more notices for better grouping
     priority: null as string | null,
     search: "",
     timePeriod: null as string | null,
     category: null as string | null,
     department: null as string | null,
-    sortBy: "priority",
-    sortOrder: "ASC" // ASC for priority means high first
+    sortBy: "published_at",
+    sortOrder: "DESC" // Get most recent first, then we'll sort by priority within dates
   });
   const [pagination, setPagination] = useState({
     page: 1,
-    limit: 10,
+    limit: 50,
     total: 0,
     totalPages: 0
   });
   const [returnedFromNotice, setReturnedFromNotice] = useState(false);
+  const [collapsedDates, setCollapsedDates] = useState<Set<string>>(new Set());
   const noticeListRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
 
@@ -91,6 +101,69 @@ const Index = () => {
       setReturnedFromNotice(false);
     }
   }, [returnedFromNotice, isLoading]);
+
+  // Group and sort notices by date and priority
+  useEffect(() => {
+    if (notices.length > 0) {
+      const grouped = groupNoticesByDate(notices);
+      setGroupedNotices(grouped);
+    } else {
+      setGroupedNotices([]);
+    }
+  }, [notices]);
+
+  const groupNoticesByDate = (noticesList: Notice[]): GroupedNotices[] => {
+    // Priority order: high -> medium -> low
+    const priorityOrder = { 'high': 1, 'medium': 2, 'low': 3 };
+    
+    // Group notices by date
+    const dateGroups: { [key: string]: Notice[] } = {};
+    
+    noticesList.forEach(notice => {
+      const date = notice.publishedAt ? new Date(notice.publishedAt).toDateString() : new Date().toDateString();
+      if (!dateGroups[date]) {
+        dateGroups[date] = [];
+      }
+      dateGroups[date].push(notice);
+    });
+
+    // Sort notices within each date group by priority
+    Object.keys(dateGroups).forEach(date => {
+      dateGroups[date].sort((a, b) => {
+        const priorityA = priorityOrder[a.priority] || 4;
+        const priorityB = priorityOrder[b.priority] || 4;
+        return priorityA - priorityB; // Sort by priority first (high -> medium -> low)
+      });
+    });
+
+    // Convert to grouped format and sort dates (today first, then by date descending)
+    const today = new Date().toDateString();
+    const groupedArray: GroupedNotices[] = Object.keys(dateGroups).map(date => {
+      const isToday = date === today;
+      const dateObj = new Date(date);
+      
+      return {
+        date,
+        displayDate: isToday ? 'Today' : dateObj.toLocaleDateString('en-US', { 
+          weekday: 'long', 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric' 
+        }),
+        isToday,
+        notices: dateGroups[date]
+      };
+    });
+
+    // Sort groups: today first, then by date descending
+    groupedArray.sort((a, b) => {
+      if (a.isToday) return -1;
+      if (b.isToday) return 1;
+      return new Date(b.date).getTime() - new Date(a.date).getTime();
+    });
+
+    return groupedArray;
+  };
 
   const fetchPublicNotices = async () => {
     try {
@@ -119,7 +192,7 @@ const Index = () => {
       setNotices(data.data.notices);
       setPagination({
         page: parseInt(data.data.pagination.page) || 1,
-        limit: parseInt(data.data.pagination.limit) || 10,
+        limit: parseInt(data.data.pagination.limit) || 50,
         total: parseInt(data.data.pagination.total) || 0,
         totalPages: parseInt(data.data.pagination.totalPages) || 1
       });
@@ -151,6 +224,18 @@ const Index = () => {
       ...prev,
       page: newPage
     }));
+  };
+
+  const toggleDateCollapse = (date: string) => {
+    setCollapsedDates(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(date)) {
+        newSet.delete(date);
+      } else {
+        newSet.add(date);
+      }
+      return newSet;
+    });
   };
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -187,6 +272,19 @@ const Index = () => {
       search: "",
       page: 1
     }));
+  };
+
+  const getPriorityBadgeColor = (priority: string) => {
+    switch (priority) {
+      case 'high':
+        return 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/20 dark:text-red-300';
+      case 'medium':
+        return 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300';
+      case 'low':
+        return 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-300';
+      default:
+        return 'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800 dark:text-gray-300';
+    }
   };
 
   return (
@@ -289,6 +387,7 @@ const Index = () => {
       </section>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 relative z-10">
+        {/* Visitor Stats */}
         <VisitorStats />
 
         {/* Latest Notices Section - Add ref here */}
@@ -377,28 +476,78 @@ const Index = () => {
                 <div className="w-12 h-12 border-4 border-sliate-accent border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
                 <p className="text-sliate-accent dark:text-gray-300">Loading notices...</p>
               </div>
-            ) : notices.length > 0 ? (
-              notices.map((notice, index) => (
-                <div 
-                  key={notice.id} 
-                  className="animate-fade-in"
-                  style={{ animationDelay: `${index * 100}ms` }}
-                >
-                  <NoticeCard 
-                    notice={{
-                      id: notice.id.toString(),
-                      topic: notice.title,
-                      description: notice.description,
-                      priority: notice.priority as 'high' | 'medium' | 'low',
-                      date: notice.publishedAt ? new Date(notice.publishedAt).toLocaleDateString() : '',
-                      views: notice.viewCount, // Make sure to pass the viewCount properly
-                      category: 'General',
-                      department: 'SLIATE',
-                      images: notice.imageUrl ? [`${import.meta.env.VITE_API_BASE_URL.replace('/api', '')}${notice.imageUrl}`] : undefined,
-                      attachments: notice.files || undefined
-                    }} 
-                    slug={notice.slug}
-                  />
+            ) : groupedNotices.length > 0 ? (
+              groupedNotices.map((dateGroup, groupIndex) => (
+                <div key={dateGroup.date} className="space-y-4">
+                  {/* Date Header */}
+                  <div 
+                    className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    onClick={() => toggleDateCollapse(dateGroup.date)}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Calendar className="h-5 w-5 text-sliate-accent" />
+                      <h3 className="text-lg font-semibold text-sliate-dark dark:text-white">
+                        {dateGroup.displayDate}
+                      </h3>
+                      {dateGroup.isToday && (
+                        <Badge className="bg-sliate-accent text-white">
+                          Today
+                        </Badge>
+                      )}
+                      <Badge variant="outline" className="text-sliate-accent border-sliate-accent/30">
+                        {dateGroup.notices.length} notice{dateGroup.notices.length !== 1 ? 's' : ''}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      {/* Priority indicators */}
+                      <div className="flex space-x-1">
+                        {['high', 'medium', 'low'].map(priority => {
+                          const count = dateGroup.notices.filter(n => n.priority === priority).length;
+                          return count > 0 ? (
+                            <Badge 
+                              key={priority} 
+                              className={`text-xs ${getPriorityBadgeColor(priority)}`}
+                            >
+                              {count} {priority}
+                            </Badge>
+                          ) : null;
+                        })}
+                      </div>
+                      {collapsedDates.has(dateGroup.date) ? (
+                        <ChevronDown className="h-5 w-5 text-sliate-accent" />
+                      ) : (
+                        <ChevronUp className="h-5 w-5 text-sliate-accent" />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Notices for this date */}
+                  {!collapsedDates.has(dateGroup.date) && (
+                    <div className="space-y-4 ml-4">
+                      {dateGroup.notices.map((notice, index) => (
+                        <div 
+                          key={notice.id} 
+                          className="animate-fade-in"
+                          style={{ animationDelay: `${(groupIndex * 100) + (index * 50)}ms` }}
+                        >
+                          <NoticeCard 
+                            notice={{
+                              id: notice.id.toString(),
+                              topic: notice.title,
+                              description: notice.description,
+                              priority: notice.priority as 'high' | 'medium' | 'low',
+                              date: notice.publishedAt ? new Date(notice.publishedAt).toLocaleDateString() : '',
+                              category: 'General',
+                              department: 'SLIATE',
+                              images: notice.imageUrl ? [`${import.meta.env.VITE_API_BASE_URL.replace('/api', '')}${notice.imageUrl}`] : undefined,
+                              attachments: notice.files || undefined
+                            }} 
+                            slug={notice.slug}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))
             ) : (
@@ -414,7 +563,7 @@ const Index = () => {
             )}
           </div>
 
-          {pagination.totalPages > 1 && (
+          {groupedNotices.length > 0 && pagination.totalPages > 1 && (
             <div className="mt-8 flex justify-center">
               <HorizontalPagination
                 currentPage={pagination.page}
@@ -555,7 +704,7 @@ const Index = () => {
               <div className="flex space-x-4">
                 <a href="#" className="text-sliate-accent dark:text-gray-300 hover:text-white transition-colors">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M23 3a10.978 10.978 0 01-3.071.839A4.48 4.48 0 0022 2.5a9.9 9.9 0 01-3.127 1.086A4.48 4.48 0 0016.616 0c-2.475 0-4.48 2.005-4.48 4.48 0 .35.039.692.115 1.021A12.743 12.743 0 011.671 1.293 4.48 4.48 0 00.967 4.9a4.48 4.48 0 001.995-.553 4.48 4.48 0 01-2.016-.526v.053a4.48 4.48 0 003.584 4.392 4.48 4.48 0 01-2.008.076 4.48 4.48 0 004.173 3.1A9.9 9.9 0 010 19.539a13.943 13.943 0 007.548 2.209c9.056 0 14.004-7.507 14.004-14.004 0-.213 0-.426-.015-.637A10.026 10.026 0 0023 3z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M23 3a10.978 10.978 0 01-3.071.839A4.48 4.48 0 0022 2.5a9.9 9.9 0 01-3.127 1.086A4.48 4.48 0 0016.616 0c-2.475 0-4.48 2.005-4.48 4.48 0 .35.039.692.115 1.021A12.743 12.743 0 011.671 1.293 4.48 4.48 0 00.967 4.9a4.48 4.48 0 001.995-.553 4.48 4.48 0 01-2.016-.526v.053a4.48 4.48 0 003.584 4.392 4.48 4.48 0 01-2.022.077 4.479 4.479 0 004.19 3.114A8.968 8.968 0 010 20.289 12.672 12.672 0 006.862 22c8.235 0 12.74-6.824 12.74-12.741 0-.194-.004-.387-.013-.58A9.086 9.086 0 0023 3z" />
                   </svg>
                 </a>
                 <a href="#" className="text-sliate-accent dark:text-gray-300 hover:text-white transition-colors">
