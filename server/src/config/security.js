@@ -197,12 +197,31 @@ const securityValidators = {
 
   // Validate file type
   isAllowedFileType: (mimetype, isImage = false) => {
-    const allowedTypes = isImage
-      ? config.upload.allowedImageTypes
-      : [...config.upload.allowedImageTypes, ...config.upload.allowedFileTypes];
-
-    return allowedTypes.includes(mimetype);
-  },
+    const allowedImageTypes = [
+        'image/jpeg', 
+        'image/jpg', 
+        'image/png', 
+        'image/gif', 
+        'image/webp'
+    ];
+    
+    const allowedDocumentTypes = [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'text/plain',
+        'application/rtf',
+        'application/vnd.oasis.opendocument.text'
+    ];
+    
+    if (isImage) {
+        return allowedImageTypes.includes(mimetype);
+    }
+    
+    return [...allowedImageTypes, ...allowedDocumentTypes].includes(mimetype);
+},
 
   // Validate file size
   isValidFileSize: (size, isImage = false) => {

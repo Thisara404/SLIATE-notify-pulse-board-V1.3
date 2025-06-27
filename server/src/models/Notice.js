@@ -28,16 +28,53 @@ class Notice {
 
   // Parse files JSON safely
   parseFiles(filesData) {
-    if (!filesData) return null;
-    
     try {
-      if (typeof filesData === 'string') {
-        return JSON.parse(filesData);
+      // If it's already an array, return it
+      if (Array.isArray(filesData)) {
+        return filesData;
       }
-      return filesData;
+      
+      // If it's a JSON string, parse it
+      if (typeof filesData === 'string') {
+        try {
+          const parsedData = JSON.parse(filesData);
+          return Array.isArray(parsedData) ? parsedData : [];
+        } catch (e) {
+          console.warn('Failed to parse files JSON string:', e.message);
+          return [];
+        }
+      }
+      
+      // If it's a Buffer or has data property (MySQL BLOB format)
+      if (filesData && typeof filesData === 'object') {
+        if (Buffer.isBuffer(filesData)) {
+          try {
+            const jsonString = filesData.toString('utf8');
+            return JSON.parse(jsonString);
+          } catch (e) {
+            console.warn('Failed to parse files from buffer:', e.message);
+            return [];
+          }
+        }
+        
+        // Handle MySQL binary format
+        if (filesData.type === 'Buffer' && Array.isArray(filesData.data)) {
+          try {
+            const buffer = Buffer.from(filesData.data);
+            const jsonString = buffer.toString('utf8');
+            return JSON.parse(jsonString);
+          } catch (e) {
+            console.warn('Failed to parse files from MySQL buffer:', e.message);
+            return [];
+          }
+        }
+      }
+      
+      // Default case
+      return [];
     } catch (error) {
-      console.warn('Failed to parse files data:', error);
-      return null;
+      console.error('Error parsing files data:', error);
+      return [];
     }
   }
 

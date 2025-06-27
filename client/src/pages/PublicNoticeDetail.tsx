@@ -13,8 +13,9 @@ import {
   FileText
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import  NoticeCard  from "@/components/NoticeCard";
+import NoticeCard from "@/components/NoticeCard";
 import { binaryToString } from '@/utils/binaryUtils';
+import NoticeFilePreview from '@/components/NoticeFilePreview';
 
 interface Notice {
   id: string | number;
@@ -37,6 +38,7 @@ const PublicNoticeDetail = () => {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.replace('/api', '') || 'http://localhost:5000';
 
   useEffect(() => {
     if (slug) {
@@ -47,7 +49,6 @@ const PublicNoticeDetail = () => {
   const fetchNotice = async (noticeSlug: string) => {
     try {
       setIsLoading(true);
-      // Log the truncated slug for debugging
       console.log("Fetching notice with slug:", noticeSlug.substring(0, 50) + (noticeSlug.length > 50 ? "..." : ""));
       
       const url = `${import.meta.env.VITE_API_BASE_URL}/public/notices/${noticeSlug}`;
@@ -59,13 +60,55 @@ const PublicNoticeDetail = () => {
         console.error("API Error:", response.status, errorData);
         
         if (response.status === 404) {
-          throw new Error("Notice not found or has been removed");
+          setError("Notice not found");
+          toast({
+            title: "Notice Not Found",
+            description: "The notice you're looking for could not be found.",
+            variant: "destructive"
+          });
         } else {
-          throw new Error(errorData.message || `Failed to fetch notice (${response.status})`);
+          setError("Failed to fetch notice");
+          toast({
+            title: "Error",
+            description: "There was a problem fetching the notice.",
+            variant: "destructive"
+          });
         }
+        return;
       }
       
       const data = await response.json();
+      console.log("API response data:", data);
+      
+      // Process file URLs to ensure they have full paths
+      if (data.data.notice.files) {
+        // Make sure files is treated as an array
+        const filesArray = Array.isArray(data.data.notice.files) ? 
+          data.data.notice.files : 
+          typeof data.data.notice.files === 'string' ? 
+            JSON.parse(data.data.notice.files) : 
+            [];
+            
+        data.data.notice.files = filesArray.map((file: any) => {
+          // Ensure each file has the required properties
+          if (!file || typeof file !== 'object') {
+            return null;
+          }
+          
+          return {
+            name: file.name || (file.url ? file.url.split('/').pop() : 'unknown'),
+            url: file.url?.startsWith('http') ? 
+              file.url : 
+              `${apiBaseUrl}${file.url?.startsWith('/') ? '' : '/'}${file.url || ''}`,
+            size: file.size || 0,
+            type: file.type || ''
+          };
+        }).filter(Boolean); // Remove any null entries
+      } else {
+        data.data.notice.files = [];
+      }
+      
+      console.log("Processed notice data:", data.data.notice);
       setNotice(data.data.notice);
       setError(null);
     } catch (error) {
@@ -86,7 +129,7 @@ const PublicNoticeDetail = () => {
       case "high":
         return "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/20 dark:text-red-300";
       case "medium":
-        return "bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-300";
+        return "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300";
       case "low":
         return "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-300";
       default:
@@ -104,31 +147,38 @@ const PublicNoticeDetail = () => {
     if (description && typeof description === 'object') {
       // Handle MySQL binary data format
       if (description.type === 'Buffer' && Array.isArray(description.data)) {
-        try {
-          return binaryToString(description.data);
-        } catch (e) {
-          console.error('Failed to decode binary data:', e);
-          return '[Binary content]';
-        }
+        return binaryToString(description.data);
       }
       
       // Fallback for other object types
       try {
         return JSON.stringify(description);
       } catch (e) {
-        return '[Complex object]';
+        return String(description);
       }
     }
     
     return String(description || '');
   };
 
+  // Handle file download
+  const handleDownloadFile = (file: { name: string; url: string }) => {
+    // Create a hidden link and trigger the download
+    const link = document.createElement('a');
+    link.href = file.url;
+    link.download = file.name;
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-sliate-neutral to-white dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-sliate-accent border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <h2 className="text-xl font-semibold text-sliate-dark dark:text-white">Loading Notice...</h2>
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-sliate-accent mx-auto mb-4"></div>
+          <p className="text-sliate-dark dark:text-white">Loading notice...</p>
         </div>
       </div>
     );
@@ -137,19 +187,13 @@ const PublicNoticeDetail = () => {
   if (error || !notice) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-sliate-neutral to-white dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
-        <Card className="max-w-md w-full border-red-300">
-          <CardHeader>
-            <CardTitle className="text-red-600">Error</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-gray-700 dark:text-gray-300 mb-4">
-              {error || "Notice not found"}
-            </p>
-            <Button asChild>
-              <Link to="/">Back to Home</Link>
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="text-center bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg">
+          <h2 className="text-2xl font-bold mb-2 text-sliate-dark dark:text-white">Notice Not Found</h2>
+          <p className="text-gray-600 dark:text-gray-300 mb-4">{error || "The notice you're looking for could not be found."}</p>
+          <Button asChild>
+            <Link to="/">Return to Home</Link>
+          </Button>
+        </div>
       </div>
     );
   }
@@ -157,62 +201,50 @@ const PublicNoticeDetail = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-sliate-neutral to-white dark:from-gray-900 dark:to-gray-800">
       <header className="bg-white dark:bg-gray-900 shadow-sm border-b border-sliate-accent/20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-4">
-              <Button variant="ghost" asChild className="text-sliate-accent dark:text-gray-300">
-                <Link to="/" state={{ fromNoticeDetail: true }} className="flex items-center space-x-2">
-                  <ArrowLeft className="h-4 w-4" />
-                  <span>Back to Home</span>
-                </Link>
-              </Button>
-              <div className="h-6 w-px bg-sliate-accent/30"></div>
-              <h1 className="text-xl font-bold text-sliate-dark dark:text-white">Notice Details</h1>
-            </div>
-          </div>
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
+          <Button variant="ghost" asChild size="sm" className="text-sliate-accent hover:text-sliate-dark dark:text-sliate-light dark:hover:text-white">
+            <Link to="/" className="flex items-center space-x-2">
+              <ArrowLeft className="h-4 w-4" />
+              <span>Back to Home</span>
+            </Link>
+          </Button>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <Card className="border-sliate-accent/20 mb-6">
+        <Card className="bg-white dark:bg-gray-800 border-sliate-accent/20">
           <CardHeader>
-            <div className="flex flex-col space-y-4">
-              <div className="flex flex-wrap gap-2 items-center justify-between">
-                <div className="flex flex-wrap gap-2 items-center">
-                  <Badge className={`${getPriorityColor(notice.priority)} text-xs font-medium`}>
-                    <Flag className="h-3 w-3 mr-1" />
-                    {notice.priority.toUpperCase()}
-                  </Badge>
-                </div>
-                
-                <div className="flex items-center space-x-1 text-sliate-accent dark:text-gray-400">
-                  <Eye className="h-4 w-4" />
-                  <span className="text-sm">
-                    {typeof notice.viewCount === 'number' ? notice.viewCount : 
-                     typeof notice.viewCount === 'string' ? parseInt(notice.viewCount, 10) : 0} views
-                  </span>
-                </div>
-              </div>
+            <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-2">
+              <Badge variant="outline" className={`${getPriorityColor(notice.priority)} px-2 py-0.5`}>
+                {notice.priority.toUpperCase()}
+              </Badge>
               
-              <h2 className="text-2xl font-bold text-sliate-dark dark:text-white">
-                {notice.title}
-              </h2>
-              
-              <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-sliate-accent dark:text-gray-400">
-                {notice.creatorName && (
-                  <div className="flex items-center space-x-1">
-                    <span>By {notice.creatorName}</span>
+              <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
+                {notice.publishedAt && (
+                  <div className="flex items-center">
+                    <Calendar className="h-4 w-4 mr-1" />
+                    <span>{new Date(notice.publishedAt).toLocaleDateString()}</span>
                   </div>
                 )}
                 
-                {notice.publishedAt && (
-                  <div className="flex items-center space-x-1">
-                    <Calendar className="h-4 w-4" />
-                    <span>Published {new Date(notice.publishedAt).toLocaleDateString()}</span>
+                {notice.viewCount !== undefined && (
+                  <div className="flex items-center">
+                    <Eye className="h-4 w-4 mr-1" />
+                    <span>{notice.viewCount} views</span>
                   </div>
                 )}
               </div>
             </div>
+            
+            <CardTitle className="text-2xl font-bold text-sliate-dark dark:text-white">
+              {notice.title}
+            </CardTitle>
+            
+            {notice.creatorName && (
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                Posted by {notice.creatorName}
+              </div>
+            )}
           </CardHeader>
           
           <CardContent className="space-y-6">
@@ -220,19 +252,18 @@ const PublicNoticeDetail = () => {
             {notice.imageUrl && (
               <div className="flex justify-center">
                 <img 
-                  src={`http://localhost:5000${notice.imageUrl.startsWith('/') ? '' : '/'}${notice.imageUrl}`}
+                  src={`${apiBaseUrl}${notice.imageUrl.startsWith('/') ? '' : '/'}${notice.imageUrl}`}
                   alt={notice.title}
                   className="max-w-full max-h-96 object-contain rounded-md shadow-md"
                   onError={(e) => {
                     // If image fails to load, try alternative path
                     const target = e.target as HTMLImageElement;
-                    const baseUrl = 'http://localhost:5000';
                     const imagePath = notice.imageUrl;
                     
                     if (!target.src.includes('/uploads/')) {
-                      target.src = `${baseUrl}/uploads/${imagePath}`;
+                      target.src = `${apiBaseUrl}/uploads/${imagePath}`;
                     } else if (!target.src.includes('/uploads/images/')) {
-                      target.src = `${baseUrl}/uploads/images/${imagePath.split('/').pop()}`;
+                      target.src = `${apiBaseUrl}/uploads/images/${imagePath.split('/').pop()}`;
                     } else {
                       // If all attempts fail, hide the image
                       target.style.display = 'none';
@@ -251,41 +282,46 @@ const PublicNoticeDetail = () => {
             
             {/* Files section */}
             {notice.files && notice.files.length > 0 && (
-              <div className="border border-sliate-accent/20 rounded-lg p-4">
+              <div className="mt-6 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
                 <h3 className="text-lg font-medium text-sliate-dark dark:text-white mb-4 flex items-center">
                   <FileText className="h-5 w-5 mr-2 text-sliate-accent" />
                   Attachments
                 </h3>
-                <div className="space-y-3">
-                  {notice.files.map((file, index) => (
-                    <div 
-                      key={index} 
-                      className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-md"
-                    >
-                      <div className="flex items-center space-x-2">
-                        <FileText className="h-5 w-5 text-sliate-accent" />
-                        <span className="font-medium text-sliate-dark dark:text-white">
-                          {file.name}
-                        </span>
-                      </div>
-                      <a 
-                        href={`${import.meta.env.VITE_API_BASE_URL.replace('/api', '')}${file.url.startsWith('/') ? '' : '/'}${file.url}`}
-                        download={file.name}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center space-x-1 text-sliate-accent hover:text-sliate-dark px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-                      >
-                        <Download className="h-4 w-4" />
-                        <span className="text-sm">Download</span>
-                      </a>
-                    </div>
-                  ))}
-                </div>
+                <NoticeFilePreview 
+                  files={notice.files} 
+                  onDownload={handleDownloadFile} 
+                />
               </div>
             )}
           </CardContent>
         </Card>
       </main>
+
+      {/* Debug section - only visible during development */}
+      {import.meta.env.DEV && (
+        <div className="mt-8 border-t border-gray-200 dark:border-gray-700 pt-4">
+          <details className="text-xs">
+            <summary className="text-gray-500 dark:text-gray-400 font-mono cursor-pointer">
+              Debug Information (development only)
+            </summary>
+            <pre className="bg-gray-100 dark:bg-gray-800 p-4 mt-2 rounded overflow-auto max-h-96 text-xs">
+              {JSON.stringify({
+                notice,
+                filesInfo: notice?.files ? {
+                  count: notice.files.length,
+                  isArray: Array.isArray(notice.files),
+                  fileDetails: notice.files.map(f => ({
+                    name: f.name,
+                    url: f.url,
+                    hasName: Boolean(f.name),
+                    hasUrl: Boolean(f.url)
+                  }))
+                } : 'No files',
+              }, null, 2)}
+            </pre>
+          </details>
+        </div>
+      )}
     </div>
   );
 };

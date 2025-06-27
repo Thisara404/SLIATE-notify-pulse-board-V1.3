@@ -320,7 +320,7 @@ class SecureUploadConfig {
   }
 
   // Get expected mimetypes for file extension
-  getExpectedMimetypes(extension) {
+  getExpectedMimetypes(ext) {
     const mimetypeMap = {
       '.jpg': ['image/jpeg'],
       '.jpeg': ['image/jpeg'],
@@ -333,10 +333,12 @@ class SecureUploadConfig {
       '.xls': ['application/vnd.ms-excel'],
       '.xlsx': ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
       '.txt': ['text/plain'],
-      '.zip': ['application/zip', 'application/x-zip-compressed']
+      '.rtf': ['application/rtf', 'text/rtf'],
+      '.zip': ['application/zip', 'application/x-zip-compressed'],
+      '.odt': ['application/vnd.oasis.opendocument.text']
     };
 
-    return mimetypeMap[extension] || [];
+    return mimetypeMap[ext.toLowerCase()] || [];
   }
 
   // Create main multer configuration

@@ -157,6 +157,9 @@ class UploadMiddleware {
         const errors = [];
 
         try {
+            // Infer MIME type if needed
+            file = this.inferMimeType(file);
+            
             // Basic file checks
             if (!file.path || !file.filename) {
                 errors.push('File was not saved properly');
@@ -222,18 +225,35 @@ class UploadMiddleware {
     validateFileType(file, expectedType) {
         const errors = [];
 
+        // Define file type categories
+        const imageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        const documentTypes = [
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'text/plain',
+            'application/rtf',
+            'application/vnd.oasis.opendocument.text'
+        ];
+
         switch (expectedType) {
             case 'image':
-                if (!securityValidators.isAllowedFileType(file.mimetype, true)) {
-                    errors.push('File type not allowed for images');
+                if (!imageTypes.includes(file.mimetype)) {
+                    errors.push('File type not allowed for images. Supported formats are: JPEG, PNG, GIF, WebP');
                 }
                 break;
 
             case 'document':
-                if (securityValidators.isAllowedFileType(file.mimetype, true)) {
-                    errors.push('Image files not allowed in document uploads');
-                } else if (!securityValidators.isAllowedFileType(file.mimetype, false)) {
-                    errors.push('File type not allowed for documents');
+                if (!documentTypes.includes(file.mimetype)) {
+                    errors.push('File type not allowed for documents. Supported formats are: PDF, DOC, DOCX, XLS, XLSX, TXT, RTF');
+                }
+                break;
+
+            case 'any':
+                if (![...imageTypes, ...documentTypes].includes(file.mimetype)) {
+                    errors.push('Unsupported file type. Please upload images or documents in supported formats.');
                 }
                 break;
         }
@@ -605,17 +625,59 @@ class UploadMiddleware {
         required: false,
         processImages: true
     });
+
+    // Add this method to the UploadMiddleware class
+    inferMimeType(file) {
+        // If mimetype is missing or is generic "application/octet-stream"
+        if (!file.mimetype || file.mimetype === 'application/octet-stream') {
+          const extension = path.extname(file.originalname).toLowerCase();
+          
+          // Map common extensions to MIME types
+          const mimeMap = {
+            '.pdf': 'application/pdf',
+            '.doc': 'application/msword',
+            '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            '.xls': 'application/vnd.ms-excel',
+            '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.png': 'image/png',
+            '.gif': 'image/gif',
+            '.webp': 'image/webp',
+            '.txt': 'text/plain',
+            '.rtf': 'application/rtf',
+            '.zip': 'application/zip',
+            '.odt': 'application/vnd.oasis.opendocument.text'
+          };
+          
+          if (mimeMap[extension]) {
+            console.log(`🔍 Inferred MIME type for ${file.originalname}: ${mimeMap[extension]}`);
+            file.mimetype = mimeMap[extension];
+          }
+        }
+        return file;
+      }
 }
 
+// Update the multerInstance configuration to properly handle document types
 const multerInstance = multer({
     storage: secureUploadConfig.createSecureStorage(),
     fileFilter: function (req, file, callback) {
         // Log the incoming file for debugging
         console.log(`Receiving file upload: ${file.originalname}, mimetype: ${file.mimetype}`);
         
-        // Define allowed mime types
+        // Define allowed mime types with expanded document support
         const allowedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-        const allowedDocumentTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
+        const allowedDocumentTypes = [
+            'application/pdf', 
+            'application/msword', 
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'text/plain',
+            'application/rtf',
+            'application/vnd.oasis.opendocument.text'
+        ];
         const allowedTypes = [...allowedImageTypes, ...allowedDocumentTypes];
         
         // Check if the file type is allowed
@@ -630,16 +692,29 @@ const multerInstance = multer({
             return callback(null, true);
         }
         
+        // For Word documents
+        if (file.mimetype === 'application/msword' || 
+            file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+            console.log(`✅ Accepted Word document: ${file.originalname}`);
+            return callback(null, true);
+        }
+        
+        // For Excel files
+        if (file.mimetype === 'application/vnd.ms-excel' || 
+            file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
+            console.log(`✅ Accepted Excel document: ${file.originalname}`);
+            return callback(null, true);
+        }
+        
         // For image files
         if (allowedImageTypes.includes(file.mimetype)) {
-            // Additional image validation if needed
             console.log(`✅ Accepted image file: ${file.originalname}`);
             return callback(null, true);
         }
         
-        // For document files
-        if (allowedDocumentTypes.includes(file.mimetype)) {
-            console.log(`✅ Accepted document file: ${file.originalname}`);
+        // For plain text files
+        if (file.mimetype === 'text/plain' || file.mimetype === 'application/rtf') {
+            console.log(`✅ Accepted text file: ${file.originalname}`);
             return callback(null, true);
         }
         
@@ -648,7 +723,7 @@ const multerInstance = multer({
         return callback(new Error('File type validation failed'), false);
     },
     limits: {
-        fileSize: secureUploadConfig.maxFileSize,
+        fileSize: secureUploadConfig.maxFileSize || 10 * 1024 * 1024, // 10MB default
         files: 6,
         fields: 10
     }

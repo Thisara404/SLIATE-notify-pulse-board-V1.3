@@ -274,7 +274,19 @@ class PublicController {
                 title: notice.title,
                 description: notice.description,
                 imageUrl: notice.imageUrl,
-                files: notice.files, // Include files for download
+                files: Array.isArray(notice.files) ? notice.files.map(file => {
+                    // Ensure each file has the required properties
+                    if (!file || typeof file !== 'object') {
+                        return null;
+                    }
+                    
+                    return {
+                        name: file.name || (file.url ? file.url.split('/').pop() : 'unknown'),
+                        url: file.url || '',
+                        size: file.size || 0,
+                        type: file.type || ''
+                    };
+                }).filter(Boolean) : [], // Remove any null entries
                 priority: notice.priority,
                 slug: notice.slug,
                 publishedAt: notice.publishedAt,
@@ -291,6 +303,9 @@ class PublicController {
                 publishedAt: related.publishedAt,
                 creatorName: related.creatorName
             }));
+
+            // Add this to the getPublishedNoticeBySlug method before sending the response
+            console.log('📄 Sending public notice with files:', JSON.stringify(publicNotice.files, null, 2));
 
             res.status(200).json({
                 success: true,

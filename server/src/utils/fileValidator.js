@@ -604,58 +604,77 @@ class FileValidator {
     const threats = [];
 
     try {
-      // Read file content (limit to first 1MB for performance)
-      const buffer = await fs.readFile(file.path);
-      const maxScanSize = Math.min(buffer.length, 1024 * 1024);
-      const content = buffer.slice(0, maxScanSize).toString('utf-8', { fatal: false });
-
-      // Scan for malicious patterns
-      for (let i = 0; i < this.maliciousPatterns.length; i++) {
-        const pattern = this.maliciousPatterns[i];
-        const matches = content.match(pattern);
-
-        if (matches) {
-          threats.push({
-            type: 'MALICIOUS_CONTENT_DETECTED',
-            pattern: pattern.toString(),
-            matches: matches.slice(0, 3), // Show first 3 matches
-            severity: 'critical',
-            description: 'File contains potentially malicious content'
-          });
+        // Skip content scanning for known binary document formats
+        if (file.mimetype === 'application/pdf' || 
+            file.mimetype === 'application/msword' || 
+            file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+            file.mimetype === 'application/vnd.ms-excel' ||
+            file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
+            
+            // For documents we can only do basic checks like file size and extension validation
+            console.log(`⏩ Skipping deep content scan for document: ${file.originalname} (${file.mimetype})`);
+            return {
+                safe: true,
+                threats: []
+            };
         }
-      }
 
-      // Check for embedded files (ZIP in image, etc.)
-      if (this.containsEmbeddedArchive(buffer)) {
-        threats.push({
-          type: 'EMBEDDED_ARCHIVE',
-          message: 'File contains embedded archive (polyglot file)',
-          severity: 'high'
-        });
-      }
+        // Read file content (limit to first 1MB for performance)
+        const buffer = await fs.readFile(file.path);
+        const maxScanSize = Math.min(buffer.length, 1024 * 1024);
+        
+        // Only try to scan text-based files
+        if (file.mimetype.startsWith('text/') || file.mimetype.includes('json') || file.mimetype.includes('xml')) {
+            const content = buffer.slice(0, maxScanSize).toString('utf-8', { fatal: false });
+            
+            // Scan for malicious patterns
+            for (let i = 0; i < this.maliciousPatterns.length; i++) {
+                const pattern = this.maliciousPatterns[i];
+                const matches = content.match(pattern);
 
-      // Check for unusual entropy (possible encrypted/obfuscated content)
-      const entropy = this.calculateEntropy(buffer.slice(0, 1024));
-      if (entropy > 7.5) {
-        threats.push({
-          type: 'HIGH_ENTROPY',
-          message: 'File has unusually high entropy (possible encryption/obfuscation)',
-          severity: 'medium',
-          entropy: entropy
-        });
-      }
+                if (matches) {
+                    threats.push({
+                        type: 'MALICIOUS_CONTENT_DETECTED',
+                        pattern: pattern.toString(),
+                        matches: matches.slice(0, 3), // Show first 3 matches
+                        severity: 'critical',
+                        description: 'File contains potentially malicious content'
+                    });
+                }
+            }
+        }
 
-      return {
-        safe: threats.length === 0,
-        threats
-      };
+        // Check for embedded files (ZIP in image, etc.)
+        if (this.containsEmbeddedArchive(buffer)) {
+            threats.push({
+                type: 'EMBEDDED_ARCHIVE',
+                message: 'File contains embedded archive (polyglot file)',
+                severity: 'high'
+            });
+        }
+
+        // Check for unusual entropy (possible encrypted/obfuscated content)
+        const entropy = this.calculateEntropy(buffer.slice(0, 1024));
+        if (entropy > 7.9) { // Increased threshold to avoid false positives with documents
+            threats.push({
+                type: 'HIGH_ENTROPY',
+                message: 'File has unusually high entropy (possible encryption/obfuscation)',
+                severity: 'medium',
+                entropy: entropy
+            });
+        }
+
+        return {
+            safe: threats.length === 0,
+            threats
+        };
 
     } catch (error) {
-      console.error('💥 Content scanning error:', error.message);
-      return {
-        safe: false,
-        threats: [{ type: 'CONTENT_SCAN_ERROR', severity: 'medium' }]
-      };
+        console.error('💥 Content scanning error:', error.message);
+        return {
+            safe: false,
+            threats: [{ type: 'CONTENT_SCAN_ERROR', severity: 'medium' }]
+        };
     }
   }
 
@@ -767,14 +786,19 @@ class FileValidator {
       '.jpeg': ['image/jpeg'],
       '.png': ['image/png'],
       '.gif': ['image/gif'],
+      '.webp': ['image/webp'],
       '.pdf': ['application/pdf'],
       '.txt': ['text/plain'],
+      '.rtf': ['application/rtf', 'text/rtf'],
       '.zip': ['application/zip'],
       '.doc': ['application/msword'],
-      '.docx': ['application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+      '.docx': ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+      '.xls': ['application/vnd.ms-excel'],
+      '.xlsx': ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+      '.odt': ['application/vnd.oasis.opendocument.text']
     };
 
-    return mimeMap[extension] || [];
+    return mimeMap[extension.toLowerCase()] || [];
   }
 
   /**
