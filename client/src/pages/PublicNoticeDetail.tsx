@@ -303,7 +303,7 @@ const PublicNoticeDetail = () => {
         </Card>
       </main>
 
-      {/* Debug section - only visible during development */}
+      {/* Debug section - only visible during development
       {import.meta.env.DEV && (
         <div className="mt-8 border-t border-gray-200 dark:border-gray-700 pt-4">
           <details className="text-xs">
@@ -327,7 +327,7 @@ const PublicNoticeDetail = () => {
             </pre>
           </details>
         </div>
-      )}
+      )} */}
     </div>
   );
 };
