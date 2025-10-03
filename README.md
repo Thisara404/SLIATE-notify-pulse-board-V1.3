@@ -66,7 +66,7 @@ Before installation, ensure you have:
 ### 1. Clone the Repository
 
 bash
-git clone https://github.com/J33WAKASUPUN/sliate-notice-system.git
+git clone https://github.com/Thisara404/sliate-notice-system.git
 cd SLIATE-Notify-V.1.3
 
 
