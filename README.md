@@ -200,11 +200,11 @@ This project is licensed under the *MIT License* - see the [LICENSE](LICENSE) fi
 
 ## 👨‍💻 Authors
 
-*J33WAKASUPUN*
-- GitHub: [@J33WAKASUPUN](https://github.com/J33WAKASUPUN)
-
 *Thisara404*
 - GitHub: [@Thisara404](https://github.com/Thisara404)
+- 
+*J33WAKASUPUN*
+- GitHub: [@J33WAKASUPUN](https://github.com/J33WAKASUPUN)
 
 ## 💖 Support
 
@@ -215,9 +215,9 @@ If you find this project helpful, consider:
 
 ## 📞 Support & Issues
 
-- *Bug Reports*: [GitHub Issues](https://github.com/J33WAKASUPUN/sliate-notice-system/issues)
-- *Feature Requests*: [GitHub Discussions](https://github.com/J33WAKASUPUN/sliate-notice-system/discussions)
-- *Email*: j33wakasupun@sliate.ac.lk
+- *Bug Reports*: [GitHub Issues](https://github.com/Thisara404/sliate-notice-system/issues)
+- *Feature Requests*: [GitHub Discussions](https://github.com/Thisara404/sliate-notice-system/discussions)
+- *Email*: thisarad28@gmail.com
 
 ---
 
